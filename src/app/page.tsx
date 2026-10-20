@@ -843,7 +843,7 @@ export default function Home() {
             <div className="quote-card">
               <div className="quote-badge-row">
                 <span className="welcome-eyebrow" style={{ margin: 0 }}>
-                  LIVE ESTIMATE
+                  QUOTE SUMMARY
                 </span>
               </div>
 
