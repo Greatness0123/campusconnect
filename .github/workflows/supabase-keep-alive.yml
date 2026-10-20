@@ -1,0 +1,26 @@
+name: Supabase Keep-Alive Ping (3x Daily)
+
+on:
+  schedule:
+    # Runs 3 times a day at 06:00, 14:00, 22:00 UTC (every 8 hours)
+    - cron: '0 6,14,22 * * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Keep-Alive Endpoint
+        run: |
+          if [ -n "${{ secrets.DEPLOYED_APP_URL }}" ]; then
+            echo "Pinging deployed app keep-alive endpoint..."
+            curl -s -f "${{ secrets.DEPLOYED_APP_URL }}/api/keep-alive" || echo "App ping had non-zero exit"
+          fi
+
+          if [ -n "${{ secrets.SUPABASE_URL }}" ] && [ -n "${{ secrets.SUPABASE_ANON_KEY }}" ]; then
+            echo "Pinging Supabase REST API directly..."
+            curl -s -f -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/keep_alive?select=*" \
+              -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+              -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" || echo "Direct ping had non-zero exit"
+          fi
+          echo "Supabase activity ping completed."
