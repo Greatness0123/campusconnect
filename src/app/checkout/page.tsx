@@ -3,12 +3,10 @@
 import {
   ArrowLeft,
   ArrowRight,
-  Check,
   LoaderCircle,
   Phone,
   Store,
   Truck,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,7 +23,6 @@ import {
   computeQuote,
   formatNaira,
   locationOptions,
-  pricing,
   type LocationArea,
 } from "@/lib/print";
 import { isSupabaseConfigured, supabase, uploadOrderFile } from "@/lib/supabase";
@@ -38,7 +35,6 @@ export default function CheckoutPage() {
   const [location, setLocation] = useState(locationOptions.Uptown[0]);
   const [fulfilment, setFulfilment] = useState<"collection" | "delivery">("collection");
   const [placing, setPlacing] = useState(false);
-  const [placedId, setPlacedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,7 +49,7 @@ export default function CheckoutPage() {
   }, [router]);
 
   const quote = useMemo(
-    () => (draft ? computeQuote(draft.files, draft.sides, draft.bound) : null),
+    () => (draft ? computeQuote(draft.files) : null),
     [draft]
   );
 
@@ -69,13 +65,13 @@ export default function CheckoutPage() {
     setError(null);
 
     const orderId = `CP-${Date.now().toString().slice(-6)}`;
-    const hasColor = draft.files.some((f) => f.colorMode === "keep");
-    const allMono = draft.files.every((f) => f.colorMode === "mono");
-    const printMode = allMono
-      ? "Black & white"
-      : hasColor && draft.files.some((f) => f.colorMode === "keep")
-        ? "Keep detected color"
-        : "Mixed";
+    const modes = new Set(draft.files.map((f) => f.colorMode));
+    const printMode =
+      modes.size > 1 ? "Mixed" : modes.has("keep") ? "Keep detected color" : "Black & white";
+
+    const anyDuplex = draft.files.some((f) => f.sides === "duplex");
+    const anyStapled = draft.files.some((f) => f.stapled);
+    const anyBound = draft.files.some((f) => f.bound);
 
     const orderItem: DemoOrder = {
       id: orderId,
@@ -92,9 +88,9 @@ export default function CheckoutPage() {
       area,
       location,
       printMode,
-      sides: draft.sides === "single" ? "Single-sided" : "Front & back",
-      stapling: draft.stapled ? "Stapled" : "No stapling",
-      binding: draft.bound ? "Binding added" : "No binding",
+      sides: anyDuplex ? "Front & back" : "Single-sided",
+      stapling: anyStapled ? "Stapled" : "No stapling",
+      binding: anyBound ? "Binding added" : "No binding",
     };
 
     localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify([orderItem, ...readDemoOrders()]));
@@ -117,7 +113,8 @@ export default function CheckoutPage() {
         });
 
         for (const file of draft.files) {
-          const filePath = await uploadOrderFile(orderId, file.file);
+          // Placeholder files restored after a refresh have size 0 — skip upload.
+          const filePath = file.file.size > 0 ? await uploadOrderFile(orderId, file.file) : "";
           const colorCount = file.colorCoverage.filter((c) => c > 0.005).length;
           await supabase.from("order_documents").insert({
             order_id: orderId,
@@ -136,13 +133,8 @@ export default function CheckoutPage() {
     }
 
     setPlacing(false);
-    setPlacedId(orderId);
     clearOrderDraft();
-  }
-
-  function finish() {
-    clearOrderDraft();
-    router.push("/");
+    router.push(`/order/${orderId}`);
   }
 
   if (!draft || !quote) {
@@ -153,36 +145,6 @@ export default function CheckoutPage() {
       </main>
     );
   }
-
-  if (placedId) {
-    return (
-      <main className="app-shell">
-        <AppHeader compact />
-        <div className="checkout-page">
-          <div className="confirmation-modal">
-            <div className="confirmation-icon">
-              <Check size={22} />
-            </div>
-            <p className="welcome-eyebrow">ORDER DISPATCHED</p>
-            <h2>Print Request Staged</h2>
-            <p>
-              Order <strong>{placedId}</strong> has been sent to the print desk. We&apos;ll reach you
-              on {phone} when it&apos;s ready for {fulfilment === "collection" ? "pickup" : "delivery"}.
-            </p>
-            <div className="modal-actions">
-              <button className="primary-button" onClick={finish}>
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  const monoRate = draft.sides === "duplex" ? pricing.duplexMono : pricing.mono;
-  const lightRate = draft.sides === "duplex" ? pricing.duplexColor : pricing.colorLight;
-  const heavyRate = draft.sides === "duplex" ? pricing.duplexColor : pricing.colorHeavy;
 
   return (
     <main className="app-shell">
@@ -234,9 +196,9 @@ export default function CheckoutPage() {
                     {fq.bindingCost > 0 && ` · binding ${formatNaira(fq.bindingCost)}`}
                   </p>
                   <p className="receipt-file-detail muted">
-                    {draft.sides === "single" ? "Single-sided" : "Front & back"}
-                    {draft.stapled && " · No stapling"}
-                    {draft.bound && " · Binding"}
+                    {fq.sides === "single" ? "Single-sided" : "Front & back"}
+                    {fq.stapled ? " · Stapled" : ""}
+                    {fq.bound ? " · Bound" : ""}
                   </p>
                 </div>
               );
@@ -245,10 +207,6 @@ export default function CheckoutPage() {
 
           {/* Aggregate breakdown */}
           <div className="receipt-summary">
-            <div className="receipt-row">
-              <span>Pages in document</span>
-              <strong>{quote.copyPages} pages (per copy)</strong>
-            </div>
             <div className="receipt-row">
               <span>Pages to print</span>
               <strong>{quote.copyPages} page sides</strong>
@@ -259,22 +217,16 @@ export default function CheckoutPage() {
             </div>
             <div className="receipt-divider" />
             <div className="receipt-row">
-              <span>B&amp;W ({formatNaira(monoRate)}/page)</span>
-              <strong>
-                {quote.blackAndWhitePages} pages = {formatNaira(quote.blackAndWhitePages * monoRate)}
-              </strong>
+              <span>B&amp;W pages</span>
+              <strong>{quote.blackAndWhitePages}</strong>
             </div>
             <div className="receipt-row">
-              <span>Colour under 50% ({formatNaira(lightRate)}/page)</span>
-              <strong>
-                {quote.lightColorPages} pages = {formatNaira(quote.lightColorPages * lightRate)}
-              </strong>
+              <span>Colour under 50%</span>
+              <strong>{quote.lightColorPages}</strong>
             </div>
             <div className="receipt-row">
-              <span>Colour over 50% ({formatNaira(heavyRate)}/page)</span>
-              <strong>
-                {quote.heavyColorPages} pages = {formatNaira(quote.heavyColorPages * heavyRate)}
-              </strong>
+              <span>Colour over 50%</span>
+              <strong>{quote.heavyColorPages}</strong>
             </div>
             <div className="receipt-divider" />
             <div className="receipt-row">
@@ -283,11 +235,11 @@ export default function CheckoutPage() {
             </div>
             <div className="receipt-row">
               <span>Stapling</span>
-              <strong>{draft.stapled ? "FREE" : "—"}</strong>
+              <strong>{quote.anyStapled ? "FREE" : "—"}</strong>
             </div>
             <div className="receipt-row">
               <span>Binding</span>
-              <strong>{draft.bound ? formatNaira(quote.finishingCost) : "No"}</strong>
+              <strong>{quote.anyBound ? formatNaira(quote.finishingCost) : "No"}</strong>
             </div>
             <div className="receipt-row">
               <span>{fulfilment === "collection" ? "Pickup" : "Delivery"}</span>
@@ -386,7 +338,7 @@ export default function CheckoutPage() {
         </button>
 
         <p className="checkout-footnote">
-          <X size={12} /> Payments are made on pickup — cash or transfer.
+          Payments are made on pickup — cash or transfer.
         </p>
       </div>
     </main>

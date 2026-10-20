@@ -33,7 +33,7 @@ export function AppHeader({ compact = false, userName, onChangeName }: { compact
     <header className={`app-header ${compact ? "compact" : ""}`}>
       <div className="header-pill">
         <Link className="brand-link" href="/" aria-label="Campus Prints home">
-          <Image className="brand-logo" src="/icononly.jpg" alt="" width={36} height={36} priority />
+          <Image className="brand-logo" src="/icononly.png" alt="" width={36} height={36} priority />
           <span>
             <span className="brand-name">Campus Prints</span>
             <span className="brand-tagline">Smart students print with us.</span>
@@ -45,8 +45,8 @@ export function AppHeader({ compact = false, userName, onChangeName }: { compact
               Not {userName}?
             </button>
           )}
-          {/* Admin link removed for student view by request */}
-          {/* {!compact && <Link className="header-link" href="/admin">Admin</Link>} */}
+          {/* Admin link removed for student view by request (admin now lives at /ccadmin) */}
+          {/* {!compact && <Link className="header-link" href="/ccadmin">Admin</Link>} */}
           {/* Theme toggle commented out by request */}
           {/* <button
             className="theme-button"

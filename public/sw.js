@@ -1,5 +1,5 @@
 const CACHE_NAME = "campus-prints-shell-v1";
-const APP_SHELL = ["/", "/manifest.webmanifest", "/icononly.jpg", "/pwa-192.png", "/pwa-512.png"];
+const APP_SHELL = ["/", "/manifest.webmanifest", "/icononly.png", "/pwa-192.png", "/pwa-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

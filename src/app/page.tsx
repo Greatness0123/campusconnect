@@ -2,12 +2,14 @@
 
 import {
   ArrowRight,
+  ChevronDown,
   Eye,
   FileText,
   Image as ImageIcon,
   LoaderCircle,
   Minus,
   Plus,
+  SlidersHorizontal,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -22,9 +24,11 @@ import {
   formatNaira,
   locationOptions,
   parsePageSelection,
+  pricing,
   type ColorMode,
+  type Sides,
 } from "@/lib/print";
-import { setOrderDraft } from "@/lib/order-draft";
+import { setOrderDraft, getOrderDraft, clearOrderDraft } from "@/lib/order-draft";
 
 type UploadStatus = "analyzing" | "ready" | "conversion" | "error";
 
@@ -39,6 +43,9 @@ type PrintFile = {
   pageSelection: string;
   copies: number;
   colorMode: ColorMode;
+  sides: Sides;
+  stapled: boolean;
+  bound: boolean;
   message?: string;
 };
 
@@ -184,11 +191,10 @@ export default function Home() {
   const [deviceId, setDeviceId] = useState("");
   const [files, setFiles] = useState<PrintFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [sides, setSides] = useState<"single" | "duplex">("single");
-  const [stapled, setStapled] = useState(false);
-  const [bound, setBound] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [openSettings, setOpenSettings] = useState<string | null>(null);
 
   // Modal preview state
   const [previewingFile, setPreviewingFile] = useState<PrintFile | null>(null);
@@ -209,12 +215,73 @@ export default function Home() {
       setName(savedName);
       void syncDeviceSession(savedDeviceId, savedName);
     }
+
+    // Restore an in-progress draft (survives back-navigation and refresh).
+    // Guarded so a bad draft can never block the welcome flow.
+    try {
+      const draft = getOrderDraft();
+      if (draft && draft.files.length > 0) {
+        setName((current) => current || draft.customer);
+        setFiles(
+          draft.files.map((f) => ({
+            id: f.id,
+            file: f.file,
+            // Placeholder files (size 0, restored after refresh) keep their stats
+            // but lose live previews and must skip re-upload.
+            status: f.file.size === 0 ? "ready" : (f.status as UploadStatus),
+            pages: f.pages,
+            colorCoverage: f.colorCoverage,
+            previewUrls: f.file.size === 0 ? [] : f.previewUrls,
+            previewPage: f.previewPage,
+            pageSelection: f.pageSelection,
+            copies: f.copies,
+            colorMode: f.colorMode,
+            sides: f.sides,
+            stapled: f.stapled,
+            bound: f.bound,
+          }))
+        );
+      }
+    } catch {
+      clearOrderDraft();
+    }
+    setDraftRestored(true);
     setHydrated(true);
   }, []);
 
+  // Keep the persisted draft in sync with the live workspace.
+  useEffect(() => {
+    if (!draftRestored) return;
+    if (files.length === 0) {
+      clearOrderDraft();
+      return;
+    }
+    setOrderDraft({
+      customer: name,
+      deviceId,
+      files: files.map((file) => ({
+        id: file.id,
+        file: file.file,
+        status: file.status,
+        pages: file.pages,
+        colorCoverage: file.colorCoverage,
+        previewUrls: file.previewUrls,
+        previewPage: file.previewPage,
+        pageSelection: file.pageSelection,
+        copies: file.copies,
+        colorMode: file.colorMode,
+        sides: file.sides,
+        stapled: file.stapled,
+        bound: file.bound,
+      })),
+      area: "Uptown",
+      location: locationOptions.Uptown[0],
+    });
+  }, [draftRestored, files, name, deviceId]);
+
   const allReady = files.length > 0 && files.every((file) => file.status === "ready");
 
-  const quote = useMemo(() => computeQuote(files, sides, bound), [files, sides, bound]);
+  const quote = useMemo(() => computeQuote(files), [files]);
 
   async function addFiles(fileList: FileList | File[]) {
     const incoming = Array.from(fileList).slice(0, Math.max(0, 10 - files.length));
@@ -236,6 +303,9 @@ export default function Home() {
       pageSelection: "all",
       copies: 1,
       colorMode: "keep",
+      sides: "single",
+      stapled: false,
+      bound: false,
     }));
 
     setFiles((current) => [...current, ...newFiles]);
@@ -277,6 +347,10 @@ export default function Home() {
     localStorage.removeItem("campusprints:user-name");
   }
 
+  function updateFile(id: string, patch: Partial<PrintFile>) {
+    setFiles((current) => current.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  }
+
   function goToCheckout() {
     if (!allReady || quote.copyPages === 0) return;
     setOrderDraft({
@@ -288,13 +362,15 @@ export default function Home() {
         status: file.status,
         pages: file.pages,
         colorCoverage: file.colorCoverage,
+        previewUrls: file.previewUrls,
+        previewPage: file.previewPage,
         pageSelection: file.pageSelection,
         copies: file.copies,
         colorMode: file.colorMode,
+        sides: file.sides,
+        stapled: file.stapled,
+        bound: file.bound,
       })),
-      sides,
-      stapled,
-      bound,
       area: "Uptown",
       location: locationOptions.Uptown[0],
     });
@@ -314,10 +390,10 @@ export default function Home() {
         <div className="welcome-center">
           <div className="welcome-emblem">
             <Image
-              src="/icononly.jpg"
+              src="/icononly.png"
               alt="Campus Prints Emblem"
-              width={96}
-              height={96}
+              width={92}
+              height={92}
               priority
             />
           </div>
@@ -551,6 +627,112 @@ export default function Home() {
                         </div>
                       )}
 
+                      {/* Collapsible print settings */}
+                      <div className="doc-settings">
+                        <button
+                          className="doc-settings-toggle"
+                          type="button"
+                          aria-expanded={openSettings === file.id}
+                          onClick={() =>
+                            setOpenSettings((current) => (current === file.id ? null : file.id))
+                          }
+                        >
+                          <SlidersHorizontal size={14} />
+                          <span>Print settings</span>
+                          <span className="doc-settings-summary">
+                            {file.sides === "duplex" ? "Front & back" : "Single-sided"}
+                            {file.stapled ? " · Stapled" : ""}
+                            {file.bound ? " · Bound" : ""}
+                          </span>
+                          <ChevronDown
+                            size={15}
+                            className={`doc-settings-chevron ${
+                              openSettings === file.id ? "open" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {openSettings === file.id && (
+                          <div className="doc-settings-panel">
+                            {/* Printing side */}
+                            <div className="option-pill-row">
+                              <div>
+                                <h4 className="setting-title">Printing side</h4>
+                                <p className="setting-desc">
+                                  {file.sides === "duplex"
+                                    ? "Printed on both sides of each sheet"
+                                    : "Printed on one side of each sheet"}
+                                </p>
+                              </div>
+                              <div className="pill-options-group">
+                                <button
+                                  className={`sub-pill-btn ${file.sides === "single" ? "active" : ""}`}
+                                  type="button"
+                                  onClick={() => updateFile(file.id, { sides: "single" })}
+                                >
+                                  Single-sided
+                                </button>
+                                <button
+                                  className={`sub-pill-btn ${file.sides === "duplex" ? "active" : ""}`}
+                                  type="button"
+                                  onClick={() => updateFile(file.id, { sides: "duplex" })}
+                                >
+                                  Front &amp; Back
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Stapling */}
+                            <div className="option-pill-row">
+                              <div>
+                                <h4 className="setting-title">Stapling</h4>
+                                <p className="setting-desc">Keep handouts bound and organized</p>
+                              </div>
+                              <div className="pill-options-group">
+                                <button
+                                  className={`sub-pill-btn ${!file.stapled ? "active" : ""}`}
+                                  type="button"
+                                  onClick={() => updateFile(file.id, { stapled: false })}
+                                >
+                                  No Stapling
+                                </button>
+                                <button
+                                  className={`sub-pill-btn ${file.stapled ? "active" : ""}`}
+                                  type="button"
+                                  onClick={() => updateFile(file.id, { stapled: true })}
+                                >
+                                  Staple (FREE)
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Binding */}
+                            <div className="option-pill-row">
+                              <div>
+                                <h4 className="setting-title">Binding</h4>
+                                <p className="setting-desc">Spiral binding with clear protective cover</p>
+                              </div>
+                              <div className="pill-options-group">
+                                <button
+                                  className={`sub-pill-btn ${!file.bound ? "active" : ""}`}
+                                  type="button"
+                                  onClick={() => updateFile(file.id, { bound: false })}
+                                >
+                                  No Binding
+                                </button>
+                                <button
+                                  className={`sub-pill-btn ${file.bound ? "active" : ""}`}
+                                  type="button"
+                                  onClick={() => updateFile(file.id, { bound: true })}
+                                >
+                                  Binding (+₦500 each)
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Interactive Preview Trigger */}
                       {file.previewUrls.length > 0 && (
                         <button
@@ -654,85 +836,6 @@ export default function Home() {
                 <Plus size={16} /> Add more files
               </button>
             )}
-
-            {/* Print Options & Finishing (Screenshots 3 & 4) */}
-            {files.length > 0 && (
-              <section className="document-card">
-                {/* Printing Side (Screenshot 4) */}
-                <div className="option-pill-row">
-                  <div>
-                    <h4 className="setting-title">Printing side</h4>
-                    <p className="setting-desc">
-                      {quote.copyPages} printed pages · {quote.physicalSheets} physical sheets
-                    </p>
-                  </div>
-                  <div className="pill-options-group">
-                    <button
-                      className={`sub-pill-btn ${sides === "single" ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setSides("single")}
-                    >
-                      Single-sided
-                    </button>
-                    <button
-                      className={`sub-pill-btn ${sides === "duplex" ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setSides("duplex")}
-                    >
-                      Front &amp; Back
-                    </button>
-                  </div>
-                </div>
-
-                {/* Stapling (Screenshot 4) */}
-                <div className="option-pill-row">
-                  <div>
-                    <h4 className="setting-title">Stapling</h4>
-                    <p className="setting-desc">Keep handouts bound and organized</p>
-                  </div>
-                  <div className="pill-options-group">
-                    <button
-                      className={`sub-pill-btn ${!stapled ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setStapled(false)}
-                    >
-                      No Stapling
-                    </button>
-                    <button
-                      className={`sub-pill-btn ${stapled ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setStapled(true)}
-                    >
-                      Staple (FREE)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Binding (Screenshot 4) */}
-                <div className="option-pill-row">
-                  <div>
-                    <h4 className="setting-title">Binding</h4>
-                    <p className="setting-desc">Spiral binding with clear protective cover</p>
-                  </div>
-                  <div className="pill-options-group">
-                    <button
-                      className={`sub-pill-btn ${!bound ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setBound(false)}
-                    >
-                      No Binding
-                    </button>
-                    <button
-                      className={`sub-pill-btn ${bound ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setBound(true)}
-                    >
-                      Binding (+₦500 each)
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
           </div>
 
           {/* Desktop Quotation Card */}
@@ -750,41 +853,44 @@ export default function Home() {
               </p>
 
               <div className="quote-breakdown-list">
-                <div className="quote-line-item">
-                  <span>Black &amp; white pages</span>
-                  <strong>
-                    {quote.blackAndWhitePages} ×{" "}
-                    {formatNaira(sides === "duplex" ? pricing.duplexMono : pricing.mono)}
-                  </strong>
-                </div>
+                {quote.blackAndWhitePages > 0 && (
+                  <div className="quote-line-item">
+                    <span>Black &amp; white pages</span>
+                    <strong>{quote.blackAndWhitePages}</strong>
+                  </div>
+                )}
                 {quote.lightColorPages > 0 && (
                   <div className="quote-line-item">
                     <span>Color &lt;50%</span>
-                    <strong>
-                      {quote.lightColorPages} ×{" "}
-                      {formatNaira(sides === "duplex" ? pricing.duplexColor : pricing.colorLight)}
-                    </strong>
+                    <strong>{quote.lightColorPages}</strong>
                   </div>
                 )}
                 {quote.heavyColorPages > 0 && (
                   <div className="quote-line-item">
                     <span>Color &gt;=50%</span>
-                    <strong>
-                      {quote.heavyColorPages} ×{" "}
-                      {formatNaira(sides === "duplex" ? pricing.duplexColor : pricing.colorHeavy)}
-                    </strong>
+                    <strong>{quote.heavyColorPages}</strong>
                   </div>
                 )}
-                {stapled && (
+                <div className="quote-line-item">
+                  <span>Printing subtotal</span>
+                  <strong>{formatNaira(quote.printCost)}</strong>
+                </div>
+                {quote.anyStapled && (
                   <div className="quote-line-item">
                     <span>Stapling</span>
                     <strong>FREE</strong>
                   </div>
                 )}
-                {bound && (
+                {quote.anyBound && (
                   <div className="quote-line-item">
                     <span>Spiral binding</span>
                     <strong>{formatNaira(quote.finishingCost)}</strong>
+                  </div>
+                )}
+                {quote.anyDuplex && (
+                  <div className="quote-line-item">
+                    <span>Front &amp; back printing</span>
+                    <strong>Applied</strong>
                   </div>
                 )}
                 <div className="quote-line-item" style={{ paddingTop: 6, borderTop: "1px dashed var(--line)" }}>
@@ -935,7 +1041,7 @@ export default function Home() {
 
       {/* <footer className="page-footer">
         <span>Campus Prints · University Student Printing</span>
-        <Link href="/admin">Operator Admin Queue</Link>
+        <Link href="/ccadmin">Operator Admin Queue</Link>
         <span>All rates in Nigerian Naira (NGN)</span>
       </footer> */}
     </main>

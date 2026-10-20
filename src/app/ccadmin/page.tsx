@@ -4,14 +4,13 @@ import {
   AlertCircle,
   ArrowLeft,
   Bell,
+  BellRing,
   Check,
   Download,
-  ExternalLink,
   FileText,
-  LoaderCircle,
+  Lock,
   Printer,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -26,6 +25,8 @@ import {
 } from "@/lib/supabase";
 
 type OrderFilter = "All" | "New" | "Printing" | "Ready" | "Completed";
+
+const TOKEN_KEY = "campusprints:ccadmin-token";
 
 function formatNaira(amount: number) {
   return `₦${Number(amount).toLocaleString("en-NG")}`;
@@ -51,13 +52,116 @@ function playAlertChime() {
   }
 }
 
+function notifyNewOrder(title: string, body: string) {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    new Notification(title, {
+      body,
+      icon: "/icononly.png",
+      badge: "/pwa-192.png",
+      tag: "campusprints-new-order",
+    });
+  } catch {
+    // Notifications unavailable
+  }
+}
+
 export default function AdminPage() {
+  // --- Access gate (verified server-side; passphrase never in this bundle) ---
+  const [authState, setAuthState] = useState<"checking" | "locked" | "unlocked">("checking");
+  const [passphrase, setPassphrase] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  // --- Notifications ---
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
+
   const [orders, setOrders] = useState<DemoOrder[]>([]);
   const [filter, setFilter] = useState<OrderFilter>("All");
   const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
   const [keepAliveLoading, setKeepAliveLoading] = useState(false);
   const [keepAliveStatus, setKeepAliveStatus] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // Verify an existing session token against the server on mount.
+  useEffect(() => {
+    let cancelled = false;
+    async function verify() {
+      let token: string | null = null;
+      try {
+        token = sessionStorage.getItem(TOKEN_KEY);
+      } catch {
+        token = null;
+      }
+      if (!token) {
+        if (!cancelled) setAuthState("locked");
+        return;
+      }
+      try {
+        const res = await fetch(`/api/ccadmin-auth?token=${encodeURIComponent(token)}`);
+        const data = (await res.json()) as { valid?: boolean };
+        if (cancelled) return;
+        if (data.valid) {
+          setAuthState("unlocked");
+        } else {
+          sessionStorage.removeItem(TOKEN_KEY);
+          setAuthState("locked");
+        }
+      } catch {
+        if (!cancelled) setAuthState("locked");
+      }
+    }
+    void verify();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Track notification permission once unlocked.
+  useEffect(() => {
+    if (authState !== "unlocked") return;
+    if (typeof Notification === "undefined") {
+      setNotifPermission("unsupported");
+      return;
+    }
+    setNotifPermission(Notification.permission);
+  }, [authState]);
+
+  async function submitPassphrase(event: React.FormEvent) {
+    event.preventDefault();
+    if (verifying) return;
+    setVerifying(true);
+    setAuthError(null);
+    try {
+      const res = await fetch("/api/ccadmin-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: passphrase }),
+      });
+      const data = (await res.json()) as { ok?: boolean; token?: string; error?: string };
+      if (data.ok && data.token) {
+        sessionStorage.setItem(TOKEN_KEY, data.token);
+        setPassphrase("");
+        setAuthState("unlocked");
+      } else {
+        setAuthError(data.error || "Incorrect passphrase.");
+      }
+    } catch {
+      setAuthError("Could not verify passphrase. Check your connection.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function enableNotifications() {
+    if (typeof Notification === "undefined") return;
+    try {
+      const result = await Notification.requestPermission();
+      setNotifPermission(result);
+    } catch {
+      // ignore
+    }
+  }
 
   const fetchOrders = useCallback(async () => {
     // 1. If Supabase is connected, fetch live orders from database
@@ -101,7 +205,10 @@ export default function AdminPage() {
     setOrders(readDemoOrders());
   }, []);
 
+  // Load + subscribe to live orders only after the gate is unlocked.
   useEffect(() => {
+    if (authState !== "unlocked") return;
+
     void fetchOrders();
 
     // Setup Supabase Realtime subscription
@@ -115,6 +222,10 @@ export default function AdminPage() {
           (payload) => {
             playAlertChime();
             const newOrder = payload.new as OrderRecord;
+            notifyNewOrder(
+              "New print order",
+              `Order ${newOrder.id} from ${newOrder.customer_name} just came in.`
+            );
             setNewOrderAlert(`New order ${newOrder.id} from ${newOrder.customer_name}!`);
             void fetchOrders();
           }
@@ -133,7 +244,7 @@ export default function AdminPage() {
       window.clearInterval(interval);
       window.removeEventListener("storage", fetchOrders);
     };
-  }, [fetchOrders]);
+  }, [authState, fetchOrders]);
 
   async function changeStatus(id: string, status: DemoOrder["status"]) {
     // Update local state
@@ -181,6 +292,52 @@ export default function AdminPage() {
     }
   }
 
+  // --- Locked: password screen (no admin data is loaded or rendered) ---
+  if (authState === "checking") {
+    return (
+      <main className="admin-shell">
+        <AppHeader compact />
+        <div className="auth-gate">
+          <p className="setting-desc">Verifying access…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (authState === "locked") {
+    return (
+      <main className="admin-shell">
+        <AppHeader compact />
+        <div className="auth-gate">
+          <form className="auth-card" onSubmit={submitPassphrase}>
+            <div className="auth-icon">
+              <Lock size={20} />
+            </div>
+            <p className="welcome-eyebrow">RESTRICTED</p>
+            <h1 className="auth-title">Operator Console</h1>
+            <p className="auth-subtitle">Enter the operator passphrase to continue.</p>
+            <input
+              className="pill-input auth-input"
+              type="password"
+              autoComplete="current-password"
+              value={passphrase}
+              onChange={(event) => setPassphrase(event.target.value)}
+              placeholder="Passphrase"
+              autoFocus
+            />
+            {authError && <p className="auth-error">{authError}</p>}
+            <button className="pill-button" type="submit" disabled={verifying || !passphrase}>
+              {verifying ? "Verifying…" : "Unlock console"}
+            </button>
+            <Link className="auth-back" href="/">
+              <ArrowLeft size={13} /> Back to student view
+            </Link>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
   const visibleOrders = filter === "All" ? orders : orders.filter((o) => o.status === filter);
   const newCount = orders.filter((o) => o.status === "New").length;
   const printingCount = orders.filter((o) => o.status === "Printing").length;
@@ -217,6 +374,28 @@ export default function AdminPage() {
             </Link>
           </div>
         </div>
+
+        {/* Notification opt-in (admin only) */}
+        {(notifPermission === "default" || notifPermission === "denied" || notifPermission === "unsupported") && (
+          <div className="admin-alert" style={{ marginBottom: 18 }}>
+            <BellRing size={18} />
+            <div style={{ flex: 1 }}>
+              <strong>Browser notifications</strong>
+              <p>
+                {notifPermission === "denied"
+                  ? "Notifications are blocked. Allow them in your browser site settings to get new-order alerts."
+                  : notifPermission === "unsupported"
+                    ? "This browser does not support notifications."
+                    : "Get a desktop alert whenever a new print order arrives."}
+              </p>
+            </div>
+            {notifPermission === "default" && (
+              <button className="admin-action-btn primary" type="button" onClick={enableNotifications}>
+                <Bell size={13} /> Enable
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Quick Stats */}
         <div className="admin-quick-stats">
@@ -280,10 +459,7 @@ export default function AdminPage() {
         )}
 
         {/* Supabase status notice */}
-        <section
-          className="admin-alert"
-          style={{ marginBottom: 20 }}
-        >
+        <section className="admin-alert" style={{ marginBottom: 20 }}>
           <AlertCircle size={18} />
           <div>
             <strong>

@@ -77,6 +77,7 @@ export function parsePageSelection(input: string, pageCount: number) {
 }
 
 export type ColorMode = "keep" | "mono";
+export type Sides = "single" | "duplex";
 
 export type QuoteFileInput = {
   id: string;
@@ -86,6 +87,9 @@ export type QuoteFileInput = {
   pageSelection: string;
   copies: number;
   colorMode: ColorMode;
+  sides: Sides;
+  stapled: boolean;
+  bound: boolean;
 };
 
 export type FileQuote = {
@@ -100,6 +104,9 @@ export type FileQuote = {
   printCost: number;
   bindingCost: number;
   totalCost: number;
+  sides: Sides;
+  stapled: boolean;
+  bound: boolean;
 };
 
 export type Quote = {
@@ -111,28 +118,32 @@ export type Quote = {
   printCost: number;
   finishingCost: number;
   total: number;
+  anyStapled: boolean;
+  anyBound: boolean;
+  anyDuplex: boolean;
   perFile: FileQuote[];
 };
 
-export function computeQuote(
-  files: QuoteFileInput[],
-  sides: "single" | "duplex",
-  bound: boolean
-): Quote {
-  const monoRate = sides === "duplex" ? pricing.duplexMono : pricing.mono;
-  const lightRate = sides === "duplex" ? pricing.duplexColor : pricing.colorLight;
-  const heavyRate = sides === "duplex" ? pricing.duplexColor : pricing.colorHeavy;
-
+export function computeQuote(files: QuoteFileInput[]): Quote {
   let blackAndWhitePages = 0;
   let lightColorPages = 0;
   let heavyColorPages = 0;
   let copyPages = 0;
+  let physicalSheets = 0;
   let printCost = 0;
   let finishingCost = 0;
+  let anyStapled = false;
+  let anyBound = false;
+  let anyDuplex = false;
   const perFile: FileQuote[] = [];
 
   for (const file of files) {
     if (file.status !== "ready") continue;
+
+    const monoRate = file.sides === "duplex" ? pricing.duplexMono : pricing.mono;
+    const lightRate = file.sides === "duplex" ? pricing.duplexColor : pricing.colorLight;
+    const heavyRate = file.sides === "duplex" ? pricing.duplexColor : pricing.colorHeavy;
+
     const selected = parsePageSelection(file.pageSelection, file.pages);
     const copies = Math.max(1, file.copies);
 
@@ -153,16 +164,20 @@ export function computeQuote(
     const lightTotal = fileLight * copies;
     const heavyTotal = fileHeavy * copies;
     const printedPages = selected.length * copies;
-    const sheets = sides === "duplex" ? Math.ceil(printedPages / 2) : printedPages;
+    const sheets = file.sides === "duplex" ? Math.ceil(printedPages / 2) : printedPages;
     const filePrintCost = bwTotal * monoRate + lightTotal * lightRate + heavyTotal * heavyRate;
-    const fileBindingCost = bound ? copies * pricing.binding : 0;
+    const fileBindingCost = file.bound ? copies * pricing.binding : 0;
 
     blackAndWhitePages += bwTotal;
     lightColorPages += lightTotal;
     heavyColorPages += heavyTotal;
     copyPages += printedPages;
+    physicalSheets += sheets;
     printCost += filePrintCost;
     finishingCost += fileBindingCost;
+    if (file.stapled) anyStapled = true;
+    if (file.bound) anyBound = true;
+    if (file.sides === "duplex") anyDuplex = true;
 
     perFile.push({
       id: file.id,
@@ -176,11 +191,11 @@ export function computeQuote(
       printCost: filePrintCost,
       bindingCost: fileBindingCost,
       totalCost: filePrintCost + fileBindingCost,
+      sides: file.sides,
+      stapled: file.stapled,
+      bound: file.bound,
     });
   }
-
-  const physicalSheets =
-    sides === "duplex" ? Math.ceil(copyPages / 2) : copyPages;
 
   return {
     blackAndWhitePages,
@@ -191,6 +206,9 @@ export function computeQuote(
     printCost,
     finishingCost,
     total: printCost + finishingCost,
+    anyStapled,
+    anyBound,
+    anyDuplex,
     perFile,
   };
 }
