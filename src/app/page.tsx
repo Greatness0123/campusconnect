@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { PwaRegister } from "@/components/pwa-register";
+import { estimateColorCoverage } from "@/lib/analysis";
+import { convertOfficeToPdf, isOfficeFilename } from "@/lib/office-to-pdf";
 import { syncDeviceSession } from "@/lib/supabase";
 import {
   computeQuote,
@@ -30,7 +32,7 @@ import {
 } from "@/lib/print";
 import { setOrderDraft, getOrderDraft, clearOrderDraft } from "@/lib/order-draft";
 
-type UploadStatus = "analyzing" | "ready" | "conversion" | "error";
+type UploadStatus = "analyzing" | "ready" | "error";
 
 type PrintFile = {
   id: string;
@@ -48,19 +50,6 @@ type PrintFile = {
   bound: boolean;
   message?: string;
 };
-
-function estimateColorCoverage(data: Uint8ClampedArray) {
-  let inkPixels = 0;
-  let chromaticPixels = 0;
-  for (let index = 0; index < data.length; index += 4) {
-    const red = data[index];
-    const green = data[index + 1];
-    const blue = data[index + 2];
-    if (Math.min(red, green, blue) < 238) inkPixels += 1;
-    if (Math.max(red, green, blue) - Math.min(red, green, blue) > 34) chromaticPixels += 1;
-  }
-  return inkPixels === 0 ? 0 : chromaticPixels / inkPixels;
-}
 
 let pdfjsPromise: Promise<any> | null = null;
 
@@ -101,7 +90,10 @@ async function getPdfJs(): Promise<any> {
   return pdfjsPromise;
 }
 
-async function analyzeFile(file: File): Promise<Partial<PrintFile>> {
+async function analyzeFile(
+  file: File,
+  onProgress?: (message: string) => void
+): Promise<Partial<PrintFile>> {
   const extension = file.name.split(".").pop()?.toLowerCase();
 
   if (extension === "pdf") {
@@ -173,14 +165,21 @@ async function analyzeFile(file: File): Promise<Partial<PrintFile>> {
     };
   }
 
-  return {
-    pages: 0,
-    colorCoverage: [],
-    previewUrls: [],
-    previewPage: 1,
-    status: "conversion",
-    message: "Office files need server conversion before print preview and analysis.",
-  };
+  if (isOfficeFilename(file.name)) {
+    const converted = await convertOfficeToPdf(file, onProgress);
+    return {
+      file: converted.pdfFile,
+      pages: converted.pages,
+      colorCoverage: converted.colorCoverage,
+      previewUrls: converted.previewUrls,
+      previewPage: 1,
+      status: "ready",
+    };
+  }
+
+  throw new Error(
+    "Unsupported file type. Upload a PDF, Word, PowerPoint or image file."
+  );
 }
 
 export default function Home() {
@@ -312,12 +311,18 @@ export default function Home() {
 
     for (const item of newFiles) {
       try {
-        const result = await analyzeFile(item.file);
+        const result = await analyzeFile(item.file, (message) =>
+          setFiles((current) =>
+            current.map((file) => (file.id === item.id ? { ...file, message } : file))
+          )
+        );
         const hasColor = (result.colorCoverage ?? []).some((c) => c > 0.005);
         const detectedMode: ColorMode = hasColor ? "keep" : "mono";
         setFiles((current) =>
           current.map((file) =>
-            file.id === item.id ? { ...file, ...result, colorMode: detectedMode } : file
+            file.id === item.id
+              ? { ...file, ...result, message: undefined, colorMode: detectedMode }
+              : file
           )
         );
       } catch (error) {
@@ -566,13 +571,17 @@ export default function Home() {
                   {file.status === "analyzing" && (
                     <div className="analysis-progress">
                       <span />
-                      <span>Inspecting pages and scanning color distribution…</span>
+                      <span>
+                        {file.message ??
+                          (isOfficeFilename(file.file.name)
+                            ? "Converting to a print-ready PDF on your device…"
+                            : "Inspecting pages and scanning color distribution…")}
+                      </span>
                       <LoaderCircle className="spin" size={16} />
                     </div>
                   )}
 
                   {file.status === "error" && <p className="inline-alert">{file.message}</p>}
-                  {file.status === "conversion" && <p className="inline-alert">{file.message}</p>}
 
                   {file.status === "ready" && (
                     <>
@@ -943,28 +952,6 @@ export default function Home() {
           </aside>
         </div>
       </div>
-
-      {/* Floating Bottom Bar for Mobile (Screenshot 2) */}
-      {files.length > 0 && (
-        <div className="mobile-floating-bar">
-          <div className="mobile-bar-content">
-            <div className="mobile-bar-meta">
-              <small>{files.length} file ready</small>
-              <strong>{formatNaira(quote.total)}</strong>
-            </div>
-            <button
-              className="pill-button"
-              style={{ width: "auto", height: 44, padding: "0 20px" }}
-              type="button"
-              onClick={() => {
-                quoteRef.current?.scrollIntoView({ behavior: "smooth" });
-              }}
-            >
-              See quotation <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Document Page Preview Modal */}
       {previewingFile && (

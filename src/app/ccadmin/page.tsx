@@ -352,16 +352,16 @@ export default function AdminPage() {
         {/* Header Row */}
         <div className="admin-header-row">
           <div>
-            <p className="welcome-eyebrow" style={{ margin: "0 0 6px" }}>
+            {/* <p className="welcome-eyebrow" style={{ margin: "0 0 6px" }}>
               CAMPUS PRINTS · PRINT OPERATOR CONSOLE
-            </p>
+            </p> */}
             <h1>
               Print Queue
               <span className="admin-badge-count">{orders.length}</span>
             </h1>
-            <p className="setting-desc">
+            {/* <p className="setting-desc">
               Real-time incoming print requests and customer document fetching.
-            </p>
+            </p> */}
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
@@ -459,7 +459,7 @@ export default function AdminPage() {
         )}
 
         {/* Supabase status notice */}
-        <section className="admin-alert" style={{ marginBottom: 20 }}>
+        {/* <section className="admin-alert" style={{ marginBottom: 20 }}>
           <AlertCircle size={18} />
           <div>
             <strong>
@@ -471,7 +471,7 @@ export default function AdminPage() {
                 : "Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local to enable remote database storage and real-time alerts."}
             </p>
           </div>
-        </section>
+        </section> */}
 
         {/* Filters */}
         <div className="admin-filters">

@@ -6,8 +6,9 @@ The current frontend is a local preview. Files stay in the browser and demo orde
 
 - PDF.js renders PDF pages in-browser and estimates page/color coverage from rendered previews. This is a useful quote estimate, not printer-side preflight.
 - JPG, PNG and WEBP are previewed as one page.
-- DOC, DOCX, PPT and PPTX require server-side conversion to PDF. Mammoth converts DOCX structure to HTML but does not preserve print layout, so it is not sufficient for page counts or final print quotes.
-- Production should preview the exact converted print artifact and apply upload-size, conversion-time and memory limits.
+- DOC, DOCX, PPT and PPTX are converted to a print-ready PDF entirely in the browser (`src/lib/office-to-pdf.ts`): docx-preview/pptx-preview render the document, each page is captured at 240 DPI, and pdf-lib assembles the PDF. Page count, colour coverage and previews come from the captured pages, and the converted PDF (not the original Office file) is what gets uploaded, quoted and printed, so the print desk receives the exact artifact the student previewed.
+- Pagination follows the page-break markers Word saves into the file, so page counts are most accurate for Word/PowerPoint-authored documents; files without those markers may paginate approximately. Legacy Word 97-2003 (.doc) and PowerPoint 97-2003 (.ppt) binaries cannot be rendered faithfully in the browser and are rejected with instructions to re-save in the modern format. Password-protected files are also rejected.
+- Conversion limits: 35 MB per file, 250 pages, 60 second conversion deadline (all enforced client-side).
 
 ## Supabase and orders
 
