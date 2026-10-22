@@ -1078,6 +1078,7 @@ a { color: inherit; text-decoration: none; }
   overflow-x: auto;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   background: var(--surface-card);
   box-shadow: var(--shadow);
 }
@@ -1214,6 +1215,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: 9999px;
   font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
   background: var(--surface-raised);
   border: 1px solid var(--line);
 }
@@ -1221,6 +1223,7 @@ a { color: inherit; text-decoration: none; }
 .status-pill.Printing { background: var(--surface-raised); color: var(--text); border-color: var(--line-strong); }
 .status-pill.Ready { border-color: var(--success); color: var(--success); background: transparent; }
 .status-pill.Completed { border-color: var(--line); color: var(--muted); }
+.admin-completed-action { white-space: nowrap; }
 
 .admin-action-btn {
   height: 34px;
@@ -1259,6 +1262,11 @@ a { color: inherit; text-decoration: none; }
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
+  scrollbar-width: none;
+}
+.admin-filters::-webkit-scrollbar,
+.admin-table-container::-webkit-scrollbar {
+  display: none;
 }
 .admin-filters .all-pages-pill {
   display: inline-flex;

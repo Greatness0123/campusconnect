@@ -24,7 +24,7 @@ import {
   type OrderDocumentRecord,
 } from "@/lib/supabase";
 
-type OrderFilter = "All" | "New" | "Printing" | "Ready" | "Completed";
+type OrderFilter = "Active" | "New" | "Printing" | "Ready" | "Completed";
 
 const TOKEN_KEY = "campusprints:ccadmin-token";
 
@@ -77,7 +77,7 @@ export default function AdminPage() {
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
 
   const [orders, setOrders] = useState<DemoOrder[]>([]);
-  const [filter, setFilter] = useState<OrderFilter>("All");
+  const [filter, setFilter] = useState<OrderFilter>("Active");
   const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
   const [keepAliveLoading, setKeepAliveLoading] = useState(false);
   const [keepAliveStatus, setKeepAliveStatus] = useState<string | null>(null);
@@ -352,7 +352,8 @@ export default function AdminPage() {
     );
   }
 
-  const visibleOrders = filter === "All" ? orders : orders.filter((o) => o.status === filter);
+  const activeOrders = orders.filter((order) => order.status !== "Completed");
+  const visibleOrders = filter === "Active" ? activeOrders : orders.filter((o) => o.status === filter);
   const newCount = orders.filter((o) => o.status === "New").length;
   const printingCount = orders.filter((o) => o.status === "Printing").length;
   const readyCount = orders.filter((o) => o.status === "Ready").length;
@@ -496,7 +497,7 @@ export default function AdminPage() {
 
         {/* Filters */}
         <div className="admin-filters">
-          {(["All", "New", "Printing", "Ready", "Completed"] as const).map((item) => (
+          {(["Active", "New", "Printing", "Ready", "Completed"] as const).map((item) => (
             <button
               key={item}
               className={`all-pages-pill ${filter === item ? "active" : ""}`}
@@ -504,8 +505,8 @@ export default function AdminPage() {
               onClick={() => setFilter(item)}
             >
               {item}
-              {item === "All"
-                ? ` (${orders.length})`
+              {item === "Active"
+                ? ` (${activeOrders.length})`
                 : ` (${orders.filter((o) => o.status === item).length})`}
             </button>
           ))}
@@ -516,7 +517,7 @@ export default function AdminPage() {
           {visibleOrders.length === 0 ? (
             <div className="admin-empty">
               <FileText size={32} />
-              <h2>No {filter === "All" ? "orders" : filter.toLowerCase()} in queue</h2>
+              <h2>No {filter === "Active" ? "active orders" : filter.toLowerCase()} in queue</h2>
               <p>When students submit print requests, they will appear here instantly.</p>
             </div>
           ) : (
@@ -621,7 +622,7 @@ export default function AdminPage() {
                         </button>
                       )}
                       {order.status === "Completed" && (
-                        <span style={{ fontSize: 12, color: "var(--success)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <span className="admin-completed-action" style={{ fontSize: 12, color: "var(--success)", display: "inline-flex", alignItems: "center", gap: 4 }}>
                           <Check size={14} /> Completed
                         </span>
                       )}
