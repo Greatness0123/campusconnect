@@ -119,16 +119,17 @@ async function renderPptxPages(
   arrayBuffer: ArrayBuffer,
   container: HTMLElement
 ): Promise<HTMLElement[]> {
-  const [{ init }, { loadAsync }] = await Promise.all([
+  const [{ init }, JSZipModule] = await Promise.all([
     import("pptx-preview"),
     import("jszip"),
   ]);
+  const JSZip = JSZipModule.default;
 
   // pptx-preview needs the target width up front, so read the native slide
   // size (EMU) from presentation.xml and pass it in CSS pixels.
   let slideWidthPx = 960;
   try {
-    const zip = await loadAsync(arrayBuffer);
+    const zip = await JSZip.loadAsync(arrayBuffer);
     const presentationXml = await zip.file("ppt/presentation.xml")?.async("text");
     const slideSizeTag = presentationXml?.match(/<p:sldSz\b[^>]*>/)?.[0];
     const cx = Number(slideSizeTag?.match(/\bcx="(\d+)"/)?.[1] ?? 0);

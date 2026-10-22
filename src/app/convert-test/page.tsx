@@ -5,10 +5,6 @@ import { convertOfficeToPdf } from "@/lib/office-to-pdf";
 
 type Check = { name: string; pass: boolean; detail: string };
 
-function check(results: Check[], name: string, pass: boolean, detail: string) {
-  results.push({ name, pass, detail });
-}
-
 async function loadFixture(name: string): Promise<File> {
   const response = await fetch(`/__test__/${name}`);
   if (!response.ok) throw new Error(`fixture ${name} missing (HTTP ${response.status})`);
@@ -23,6 +19,9 @@ async function runTests(): Promise<{
 }> {
   const results: Check[] = [];
   const durations: Record<string, number> = {};
+  function check(name: string, pass: boolean, detail: string) {
+    results.push({ name, pass, detail });
+  }
   const { PDFDocument } = await import("pdf-lib");
 
   // --- .docx conversion ---

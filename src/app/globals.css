@@ -134,9 +134,6 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   justify-content: center;
   padding: 16px clamp(16px, 4vw, 48px) 0;
-  position: sticky;
-  top: 0;
-  z-index: 20;
   background: transparent;
 }
 .header-pill {
@@ -464,6 +461,8 @@ a { color: inherit; text-decoration: none; }
   text-overflow: ellipsis;
   margin: 0;
   min-width: 0;
+  overflow-wrap: anywhere;
+  flex: 1 1 0;
 }
 .badge-tag {
   display: inline-flex;
@@ -1072,14 +1071,19 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700;
 }
 .admin-table-container {
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 18px;
-  overflow: hidden;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
   background: var(--surface-card);
   box-shadow: var(--shadow);
 }
 .admin-data-table {
   width: 100%;
+  min-width: 940px;
   border-collapse: collapse;
   text-align: left;
 }
@@ -1099,7 +1103,10 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--line);
   font-size: 12px;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
+.admin-data-table td:nth-child(3) > div > div { min-width: 0; flex-wrap: wrap; }
+.admin-document-name { min-width: 0; overflow-wrap: anywhere; }
 .admin-data-table tbody tr {
   transition: background-color 0.15s ease;
 }
@@ -1580,15 +1587,13 @@ a { color: inherit; text-decoration: none; }
 .receipt-file-name {
   font-size: 12px;
   font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  flex: 1 1 auto;
 }
-.receipt-file-cost { font-size: 13px; font-weight: 800; white-space: nowrap; }
+.receipt-file-cost { font-size: 13px; font-weight: 800; white-space: nowrap; flex: 0 0 auto; }
 .receipt-file-detail { font-size: 11px; color: var(--text-secondary); margin: 0; line-height: 1.5; }
-.receipt-file-detail.muted { color: var(--muted); }
-
-.receipt-summary { display: grid; gap: 11px; }
 .receipt-row {
   display: flex;
   align-items: baseline;
@@ -1715,13 +1720,19 @@ a { color: inherit; text-decoration: none; }
   .preview-modal-body { padding: 14px; gap: 14px; }
   .preview-modal-footer { padding: 10px 14px; }
   .admin-container { width: calc(100% - 32px); }
+  .admin-header-row > div:last-child { width: 100%; flex-wrap: wrap; }
+  .admin-header-row > div:last-child > * { flex: 1 1 auto; justify-content: center; }
+  .admin-filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+  .admin-filters > * { flex: 0 0 auto; }
   .admin-quick-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
   .brand-tagline { display: none; }
   .checkout-page { width: calc(100% - 32px); padding-top: 20px; }
-  .receipt-card { padding: 20px 18px; }
+  .receipt-card { min-width: 0; padding: 20px 18px; }
+  .receipt-file { min-width: 0; }
   .receipt-header h1 { font-size: 18px; }
   .receipt-total strong { font-size: 24px; }
   .fulfilment-grid { grid-template-columns: 1fr 1fr; }
+  input, select, textarea { font-size: 16px; }
 }
 
 /* Order tracking page */
@@ -1900,10 +1911,38 @@ a { color: inherit; text-decoration: none; }
 }
 .order-doc-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  flex: 1 1 0;
   color: var(--text);
+}
+
+.orders-heading,
+.order-history-top,
+.order-history-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.orders-heading h1 { margin-bottom: 0; }
+.orders-list { display: grid; gap: 12px; }
+.order-history-id { display: grid; gap: 4px; min-width: 0; }
+.order-history-id strong,
+.order-history-id span { overflow-wrap: anywhere; }
+.order-history-id span,
+.order-history-detail { color: var(--muted); font-size: 12px; }
+.order-history-detail { flex-wrap: wrap; }
+.order-history-detail strong { color: var(--text); }
+.orders-empty { justify-items: start; }
+.orders-empty h2,
+.orders-empty p { margin: 0; }
+.orders-empty p { color: var(--muted); line-height: 1.5; }
+@media (max-width: 600px) {
+  .orders-heading { align-items: flex-start; }
+  .orders-heading .order-home-link { white-space: nowrap; }
+  .order-history-top { align-items: flex-start; }
+  .order-history-detail { align-items: flex-start; flex-direction: column; gap: 6px; }
 }
 
 /* Feedback */

@@ -81,6 +81,7 @@ export default function AdminPage() {
   const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
   const [keepAliveLoading, setKeepAliveLoading] = useState(false);
   const [keepAliveStatus, setKeepAliveStatus] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   // Verify an existing session token against the server on mount.
@@ -247,19 +248,32 @@ export default function AdminPage() {
   }, [authState, fetchOrders]);
 
   async function changeStatus(id: string, status: DemoOrder["status"]) {
-    // Update local state
-    const updated = orders.map((o) => (o.id === id ? { ...o, status } : o));
-    setOrders(updated);
-    localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify(updated));
-
-    // Update Supabase if active
+    setStatusError(null);
     if (supabase && isSupabaseConfigured) {
       try {
-        await supabase.from("orders").update({ status }).eq("id", id);
+        const { data, error } = await supabase
+          .from("orders")
+          .update({ status })
+          .eq("id", id)
+          .select("id")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error("The order was not found in the database.");
+        setOrders((current) =>
+          current.map((order) => (order.id === id ? { ...order, status } : order))
+        );
       } catch (err) {
         console.warn("Failed to update status in Supabase:", err);
+        setStatusError(
+          err instanceof Error ? `Status update failed: ${err.message}` : "Status update failed. Check the connection and try again."
+        );
       }
+      return;
     }
+
+    const updated = orders.map((order) => (order.id === id ? { ...order, status } : order));
+    setOrders(updated);
+    localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify(updated));
   }
 
   async function fetchDocument(docName: string, filePath?: string) {
@@ -458,6 +472,13 @@ export default function AdminPage() {
           </div>
         )}
 
+        {statusError && (
+          <div className="admin-alert" role="alert" style={{ marginBottom: 18 }}>
+            <AlertCircle size={16} />
+            <p>{statusError}</p>
+          </div>
+        )}
+
         {/* Supabase status notice */}
         {/* <section className="admin-alert" style={{ marginBottom: 20 }}>
           <AlertCircle size={18} />
@@ -475,7 +496,7 @@ export default function AdminPage() {
 
         {/* Filters */}
         <div className="admin-filters">
-          {(["All", "New", "Printing", "Ready"] as const).map((item) => (
+          {(["All", "New", "Printing", "Ready", "Completed"] as const).map((item) => (
             <button
               key={item}
               className={`all-pages-pill ${filter === item ? "active" : ""}`}
@@ -532,7 +553,7 @@ export default function AdminPage() {
                         {order.documents.map((doc, idx) => (
                           <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <FileText size={14} />
-                            <span>
+                            <span className="admin-document-name">
                               {doc.name} ({doc.pages} pages × {doc.copies} copy)
                             </span>
                             {/* Fetch Document to Print button */}
@@ -592,9 +613,17 @@ export default function AdminPage() {
                         </button>
                       )}
                       {order.status === "Ready" && (
+                        <button
+                          className="admin-action-btn primary"
+                          type="button"
+                          onClick={() => changeStatus(order.id, "Completed")}
+                        >
+                          <Check size={13} /> Mark Collected
+                        </button>
+                      )}
+                      {order.status === "Completed" && (
                         <span style={{ fontSize: 12, color: "var(--success)", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <Check size={14} />
-                          Ready for pickup
+                          <Check size={14} /> Completed
                         </span>
                       )}
                     </td>

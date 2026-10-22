@@ -28,7 +28,7 @@ const STORAGE_KEY = "campusprints:order-draft";
 
 // Serializable shape: real File objects are dropped (bytes can't go to JSON),
 // kept as metadata so the file cards can be restored after a refresh.
-type PersistedFile = Omit<DraftFile, "file"> & {
+type PersistedFile = Omit<DraftFile, "file" | "previewUrls"> & {
   fileName: string;
   fileType: string;
 };
@@ -44,7 +44,7 @@ function isBrowser() {
 function serialize(next: OrderDraft): PersistedDraft {
   return {
     ...next,
-    files: next.files.map(({ file, ...rest }) => ({
+    files: next.files.map(({ file, previewUrls: _previewUrls, ...rest }) => ({
       ...rest,
       fileName: file.name,
       fileType: file.type,
@@ -72,6 +72,7 @@ function readPersisted(): OrderDraft | null {
       ...parsed,
       files: parsed.files.map(({ fileName, fileType, ...rest }) => ({
         ...rest,
+        previewUrls: [],
         // Placeholder File (size 0) restores name/type for display.
         // Real bytes are only available in the in-memory copy of a live session,
         // so uploads skip size-0 placeholders after a refresh.

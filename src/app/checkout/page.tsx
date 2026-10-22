@@ -75,6 +75,7 @@ export default function CheckoutPage() {
 
     const orderItem: DemoOrder = {
       id: orderId,
+      deviceId: draft.deviceId,
       customer: draft.customer,
       createdAt: new Date().toISOString(),
       status: "New",

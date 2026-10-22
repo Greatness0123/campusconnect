@@ -40,6 +40,7 @@ export function AppHeader({ compact = false, userName, onChangeName }: { compact
           </span>
         </Link>
         <div className="header-actions">
+          {!compact && <Link className="header-link" href="/orders">My orders</Link>}
           {!compact && onChangeName && (
             <button className="header-link" type="button" onClick={onChangeName}>
               Not {userName}?

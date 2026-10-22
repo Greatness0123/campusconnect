@@ -2,9 +2,10 @@ export const DEMO_ORDERS_KEY = "campusprints:demo-orders";
 
 export type DemoOrder = {
   id: string;
+  deviceId?: string;
   customer: string;
   createdAt: string;
-  status: "New" | "Printing" | "Ready";
+  status: "New" | "Printing" | "Ready" | "Completed";
   documents: { name: string; pages: number; selectedPages: number[]; copies: number }[];
   total: number;
   area: string;

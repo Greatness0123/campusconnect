@@ -2,14 +2,12 @@
 
 import {
   ArrowRight,
-  ChevronDown,
   Eye,
   FileText,
   Image as ImageIcon,
   LoaderCircle,
   Minus,
   Plus,
-  SlidersHorizontal,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -193,7 +191,7 @@ export default function Home() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
   const [draftRestored, setDraftRestored] = useState(false);
-  const [openSettings, setOpenSettings] = useState<string | null>(null);
+  const [openingSummary, setOpeningSummary] = useState(false);
 
   // Modal preview state
   const [previewingFile, setPreviewingFile] = useState<PrintFile | null>(null);
@@ -357,7 +355,8 @@ export default function Home() {
   }
 
   function goToCheckout() {
-    if (!allReady || quote.copyPages === 0) return;
+    if (!allReady || quote.copyPages === 0 || openingSummary) return;
+    setOpeningSummary(true);
     setOrderDraft({
       customer: name,
       deviceId,
@@ -523,7 +522,14 @@ export default function Home() {
                 <div className="upload-icon-circle">
                   <UploadCloud size={26} />
                 </div>
-                <button className="upload-action-btn" type="button">
+                <button
+                  className="upload-action-btn"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    fileInput.current?.click();
+                  }}
+                >
                   Upload Files
                 </button>
                 <p className="upload-drag-text">or drag &amp; drop them here</p>
@@ -636,33 +642,10 @@ export default function Home() {
                         </div>
                       )}
 
-                      {/* Collapsible print settings */}
+                      {/* Print settings */}
                       <div className="doc-settings">
-                        <button
-                          className="doc-settings-toggle"
-                          type="button"
-                          aria-expanded={openSettings === file.id}
-                          onClick={() =>
-                            setOpenSettings((current) => (current === file.id ? null : file.id))
-                          }
-                        >
-                          <SlidersHorizontal size={14} />
-                          <span>Print settings</span>
-                          <span className="doc-settings-summary">
-                            {file.sides === "duplex" ? "Front & back" : "Single-sided"}
-                            {file.stapled ? " · Stapled" : ""}
-                            {file.bound ? " · Bound" : ""}
-                          </span>
-                          <ChevronDown
-                            size={15}
-                            className={`doc-settings-chevron ${
-                              openSettings === file.id ? "open" : ""
-                            }`}
-                          />
-                        </button>
-
-                        {openSettings === file.id && (
-                          <div className="doc-settings-panel">
+                        {/* <h4 className="setting-title">Print settings</h4> */}
+                        <div className="doc-settings-panel">
                             {/* Printing side */}
                             <div className="option-pill-row">
                               <div>
@@ -695,7 +678,7 @@ export default function Home() {
                             <div className="option-pill-row">
                               <div>
                                 <h4 className="setting-title">Stapling</h4>
-                                <p className="setting-desc">Keep handouts bound and organized</p>
+                                {/* <p className="setting-desc">Keep handouts bound and organized</p> */}
                               </div>
                               <div className="pill-options-group">
                                 <button
@@ -738,8 +721,7 @@ export default function Home() {
                                 </button>
                               </div>
                             </div>
-                          </div>
-                        )}
+                        </div>
                       </div>
 
                       {/* Interactive Preview Trigger */}
@@ -911,10 +893,10 @@ export default function Home() {
               <button
                 className="pill-button"
                 type="button"
-                disabled={!canCreateOrder}
+                disabled={!canCreateOrder || openingSummary}
                 onClick={goToCheckout}
               >
-                Send to Print Desk <ArrowRight size={17} />
+                {openingSummary ? "Opening summary…" : "Send to Print Desk"} <ArrowRight size={17} />
               </button>
 
               {/* Payment paused banner removed by request */}

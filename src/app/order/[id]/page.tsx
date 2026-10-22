@@ -12,6 +12,7 @@ const STEPS = [
   { key: "New", label: "Received", desc: "Your order is in the print queue" },
   { key: "Printing", label: "Printing", desc: "We're printing your pages now" },
   { key: "Ready", label: "Ready for pickup", desc: "Collect at your pickup spot" },
+  { key: "Completed", label: "Completed", desc: "Your order has been collected" },
 ] as const;
 
 const feedbackKey = (id: string) => `campusprints:order-feedback:${id}`;
@@ -29,22 +30,28 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
   const [savedFeedback, setSavedFeedback] = useState<Feedback | null>(null);
 
   const loadOrder = useCallback(async () => {
-    const local = readDemoOrders().find((o) => o.id === id);
-    if (local) {
-      setOrder(local);
-      setLoading(false);
-      return;
-    }
     if (supabase && isSupabaseConfigured) {
       try {
-        const { data } = await supabase.from("orders").select("*").eq("id", id).maybeSingle();
+        const { data } = await supabase
+          .from("orders")
+          .select("*, order_documents(*)")
+          .eq("id", id)
+          .maybeSingle();
         if (data) {
           setOrder({
             id: data.id,
             customer: data.customer_name,
             createdAt: data.created_at,
             status: data.status as DemoOrder["status"],
-            documents: [],
+            documents: (data.order_documents ?? []).map((document: {
+              file_name: string;
+              total_pages: number;
+            }) => ({
+              name: document.file_name,
+              pages: document.total_pages,
+              selectedPages: [],
+              copies: data.copies || 1,
+            })),
             total: data.total_amount,
             area: data.pickup_area,
             location: data.pickup_location,
@@ -53,11 +60,14 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
             stapling: data.stapling,
             binding: data.binding,
           });
+          setLoading(false);
+          return;
         }
       } catch {
-        // ignore — fall through to not-found state
+        // Fall back to the local order if the network is unavailable.
       }
     }
+    setOrder(readDemoOrders().find((o) => o.id === id) ?? null);
     setLoading(false);
   }, [id]);
 
@@ -65,19 +75,18 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
     void loadOrder();
   }, [loadOrder]);
 
-  // Live refresh: same-tab admin changes + storage events from other tabs.
+  // Poll the authoritative order so tracking works without Realtime delivery.
   useEffect(() => {
-    const refresh = () => {
-      const found = readDemoOrders().find((o) => o.id === id);
-      if (found) setOrder(found);
-    };
-    const interval = window.setInterval(refresh, 3000);
+    const refresh = () => void loadOrder();
+    const interval = window.setInterval(refresh, 5000);
     window.addEventListener("storage", refresh);
+    window.addEventListener("focus", refresh);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("storage", refresh);
+      window.removeEventListener("focus", refresh);
     };
-  }, [id]);
+  }, [loadOrder]);
 
   // Live refresh: Supabase realtime row updates.
   useEffect(() => {
@@ -162,9 +171,11 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  const stepIndex = order.status === "New" ? 0 : order.status === "Printing" ? 1 : 2;
+  const stepIndex = order.status === "New" ? 0 : order.status === "Printing" ? 1 : order.status === "Ready" ? 2 : 3;
   const heading =
-    order.status === "Ready"
+    order.status === "Completed"
+      ? "Order completed"
+      : order.status === "Ready"
       ? "Your print is ready!"
       : order.status === "Printing"
         ? "We're printing your pages"

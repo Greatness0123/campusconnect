@@ -23,6 +23,9 @@ self.addEventListener("fetch", (event) => {
         void caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
       }
       return response;
-    }).catch(async () => (await caches.match(request)) ?? (await caches.match("/"))),
+    }).catch(async () => {
+      if (request.mode !== "navigate") throw new Error("Network request failed.");
+      return (await caches.match(request)) ?? (await caches.match("/")) ?? Response.error();
+    }),
   );
 });
