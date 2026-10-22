@@ -1,5 +1,6 @@
-const CACHE_NAME = "campus-prints-shell-v1";
+const CACHE_NAME = "campus-prints-shell-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icononly.png", "/pwa-192.png", "/pwa-512.png"];
+const PDF_ASSETS = new Set(["/pdf.min.mjs", "/pdf.worker.min.mjs"]);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -8,7 +9,10 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key.startsWith("campus-prints-shell-") && key !== CACHE_NAME)
+        .map((key) => caches.delete(key)),
+    )),
   );
   self.clients.claim();
 });
@@ -16,16 +20,31 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+
+  if (PDF_ASSETS.has(url.pathname)) {
+    event.respondWith(
+      fetch(request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      }).catch(async () => (await caches.match(request)) ?? Response.error()),
+    );
+    return;
+  }
+
+  if (request.mode !== "navigate") return;
   event.respondWith(
     fetch(request).then((response) => {
-      if (response.ok && request.mode === "navigate") {
+      if (response.ok) {
         const copy = response.clone();
-        void caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+        void caches.open(CACHE_NAME).then((cache) => cache.put(url.pathname, copy));
       }
       return response;
     }).catch(async () => {
-      if (request.mode !== "navigate") throw new Error("Network request failed.");
-      return (await caches.match(request)) ?? (await caches.match("/")) ?? Response.error();
+      return (await caches.match(url.pathname)) ?? (await caches.match("/")) ?? Response.error();
     }),
   );
 });

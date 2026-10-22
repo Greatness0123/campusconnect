@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { Viewport } from "next";
 import type { ReactNode } from "react";
+import { PwaRegister } from "@/components/pwa-register";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://campusprints-ng.zite.so";
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
   },
   description: "Upload, preview and configure your campus print order. Get a clear printing estimate in naira before sending documents to print.",
   applicationName: "Campus Prints",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Campus Prints" },
   keywords: ["student printing", "campus printing", "document printing", "print quotation", "Nigeria"],
   alternates: { canonical: "/" },
   openGraph: {
@@ -40,6 +42,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: "#fafafa",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -72,7 +75,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <PwaRegister />
+        {children}
+      </body>
     </html>
   );
 }

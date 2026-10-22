@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { readDemoOrders, type DemoOrder } from "@/lib/demo-orders";
 import { formatNaira } from "@/lib/print";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase, type OrderDocumentRecord } from "@/lib/supabase";
 
 export default function OrdersPage() {
   const [deviceId, setDeviceId] = useState("");
@@ -32,7 +32,7 @@ export default function OrdersPage() {
             customer: order.customer_name,
             createdAt: order.created_at,
             status: order.status as DemoOrder["status"],
-            documents: (order.order_documents ?? []).map((document) => ({
+            documents: (order.order_documents ?? []).map((document: OrderDocumentRecord) => ({
               name: document.file_name,
               pages: document.total_pages,
               selectedPages: [],

@@ -500,7 +500,6 @@ export default function AdminPage() {
             <button
               key={item}
               className={`all-pages-pill ${filter === item ? "active" : ""}`}
-              style={{ height: 36, padding: "0 14px" }}
               type="button"
               onClick={() => setFilter(item)}
             >

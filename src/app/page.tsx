@@ -15,7 +15,6 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
-import { PwaRegister } from "@/components/pwa-register";
 import { estimateColorCoverage } from "@/lib/analysis";
 import { convertOfficeToPdf, isOfficeFilename } from "@/lib/office-to-pdf";
 import { syncDeviceSession } from "@/lib/supabase";
@@ -388,7 +387,6 @@ export default function Home() {
   if (!hydrated || !name) {
     return (
       <main className="welcome-screen">
-        <PwaRegister />
         <AppHeader compact />
 
         <div className="welcome-center">
@@ -437,7 +435,6 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      <PwaRegister />
       <AppHeader userName={name} onChangeName={changeName} />
 
       <div className="page-wrap">
@@ -493,13 +490,15 @@ export default function Home() {
           <div className="main-column">
             <input
               ref={fileInput}
+              id="print-file-input"
               className="visually-hidden"
               type="file"
               multiple
               accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.webp"
               onChange={(event) => {
-                if (event.target.files) void addFiles(event.target.files);
-                event.target.value = "";
+                const selectedFiles = Array.from(event.currentTarget.files ?? []);
+                event.currentTarget.value = "";
+                if (selectedFiles.length > 0) void addFiles(selectedFiles);
               }}
             />
 
@@ -608,39 +607,37 @@ export default function Home() {
                       </div>
 
                       {/* Per-file print colour */}
-                      {colorPagesCount > 0 && (
-                        <div className="choice-cards-section">
-                          <label>How should we print this?</label>
-                          <div className="dual-cards-grid">
-                            <div
-                              className={`dual-card ${file.colorMode === "keep" ? "selected" : ""}`}
-                              onClick={() =>
-                                setFiles((current) =>
-                                  current.map((f) =>
-                                    f.id === file.id ? { ...f, colorMode: "keep" } : f
-                                  )
+                      <div className="choice-cards-section">
+                        <label>How should we print this?</label>
+                        <div className="dual-cards-grid">
+                          <div
+                            className={`dual-card ${file.colorMode === "keep" ? "selected" : ""}`}
+                            onClick={() =>
+                              setFiles((current) =>
+                                current.map((f) =>
+                                  f.id === file.id ? { ...f, colorMode: "keep" } : f
                                 )
-                              }
-                            >
-                              <h4 className="dual-card-title">Print in colour</h4>
-                              <p className="dual-card-desc">Keep the colours in your file</p>
-                            </div>
-                            <div
-                              className={`dual-card ${file.colorMode === "mono" ? "selected" : ""}`}
-                              onClick={() =>
-                                setFiles((current) =>
-                                  current.map((f) =>
-                                    f.id === file.id ? { ...f, colorMode: "mono" } : f
-                                  )
+                              )
+                            }
+                          >
+                            <h4 className="dual-card-title">Print in colour</h4>
+                            <p className="dual-card-desc">Keep the colours in your file</p>
+                          </div>
+                          <div
+                            className={`dual-card ${file.colorMode === "mono" ? "selected" : ""}`}
+                            onClick={() =>
+                              setFiles((current) =>
+                                current.map((f) =>
+                                  f.id === file.id ? { ...f, colorMode: "mono" } : f
                                 )
-                              }
-                            >
-                              <h4 className="dual-card-title">Black &amp; white</h4>
-                              <p className="dual-card-desc">Everything printed in B&amp;W</p>
-                            </div>
+                              )
+                            }
+                          >
+                            <h4 className="dual-card-title">Black &amp; white</h4>
+                            <p className="dual-card-desc">Everything printed in B&amp;W</p>
                           </div>
                         </div>
-                      )}
+                      </div>
 
                       {/* Print settings */}
                       <div className="doc-settings">
