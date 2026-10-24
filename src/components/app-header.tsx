@@ -7,7 +7,7 @@ import Link from "next/link";
 
 // type ThemeMode = "system" | "light" | "dark";
 
-export function AppHeader({ compact = false, userName, onChangeName }: { compact?: boolean; userName?: string; onChangeName?: () => void }) {
+export function AppHeader({ compact = false, showOrders = true, userName, onChangeName }: { compact?: boolean; showOrders?: boolean; userName?: string; onChangeName?: () => void }) {
   // Theme toggle — commented out by request
   // const [theme, setTheme] = useState<ThemeMode>("system");
 
@@ -40,7 +40,7 @@ export function AppHeader({ compact = false, userName, onChangeName }: { compact
           </span>
         </Link>
         <div className="header-actions">
-          {!compact && <Link className="header-link" href="/orders">My orders</Link>}
+          {!compact && showOrders && <Link className="header-link" href="/orders">My orders</Link>}
           {!compact && onChangeName && (
             <button className="header-link" type="button" onClick={onChangeName}>
               Not {userName}?

@@ -361,7 +361,7 @@ export default function AdminPage() {
 
   return (
     <main className="admin-shell">
-      <AppHeader />
+      <AppHeader showOrders={false} />
 
       <div className="admin-container">
         {/* Header Row */}
