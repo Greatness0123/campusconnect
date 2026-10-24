@@ -52,15 +52,24 @@ function playAlertChime() {
   }
 }
 
-function notifyNewOrder(title: string, body: string) {
+async function notifyNewOrder(title: string, body: string) {
   try {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    new Notification(title, {
+    const options = {
       body,
       icon: "/icononly.png",
       badge: "/pwa-192.png",
       tag: "campusprints-new-order",
-    });
+      data: { url: "/ccadmin" },
+    };
+
+    const registration = await navigator.serviceWorker?.getRegistration();
+    if (registration) {
+      await registration.showNotification(title, options);
+      return;
+    }
+
+    new Notification(title, options);
   } catch {
     // Notifications unavailable
   }
@@ -401,7 +410,7 @@ export default function AdminPage() {
                   ? "Notifications are blocked. Allow them in your browser site settings to get new-order alerts."
                   : notifPermission === "unsupported"
                     ? "This browser does not support notifications."
-                    : "Get a desktop alert whenever a new print order arrives."}
+                    : "Get an alert on this device whenever a new print order arrives. On iPhone or iPad, add the app to your Home Screen first."}
               </p>
             </div>
             {notifPermission === "default" && (
