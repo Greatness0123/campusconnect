@@ -27,6 +27,23 @@ import {
 } from "@/lib/print";
 import { isSupabaseConfigured, supabase, uploadOrderFile } from "@/lib/supabase";
 
+const LOCAL_ORDER_COUNTER_KEY = "campusprints:order-counter";
+
+function getLocalOrderId() {
+  const savedNumber = Number(localStorage.getItem(LOCAL_ORDER_COUNTER_KEY));
+  let nextNumber = Number.isSafeInteger(savedNumber) && savedNumber > 0 ? savedNumber : 1;
+  const existingIds = new Set(readDemoOrders().map((order) => order.id));
+  let orderId = `CP-${String(nextNumber).padStart(4, "0")}`;
+
+  while (existingIds.has(orderId)) {
+    nextNumber += 1;
+    orderId = `CP-${String(nextNumber).padStart(4, "0")}`;
+  }
+
+  localStorage.setItem(LOCAL_ORDER_COUNTER_KEY, String(nextNumber + 1));
+  return orderId;
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
   const [draft, setDraft] = useState<OrderDraft | null>(null);
@@ -64,7 +81,29 @@ export default function CheckoutPage() {
     setPlacing(true);
     setError(null);
 
-    const orderId = `CP-${Date.now().toString().slice(-6)}`;
+    if (supabase && isSupabaseConfigured && draft.files.some((file) => file.file.size === 0)) {
+      setError("A document is no longer available after refresh. Go back, remove it, and upload the original file again.");
+      setPlacing(false);
+      return;
+    }
+
+    let orderId: string;
+    try {
+      if (supabase && isSupabaseConfigured) {
+        const { data, error: idError } = await supabase.rpc("next_order_id");
+        if (idError || typeof data !== "string" || !data) {
+          throw new Error("Could not generate an order number. Please try again.");
+        }
+        orderId = data;
+      } else {
+        orderId = getLocalOrderId();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate an order number. Please try again.");
+      setPlacing(false);
+      return;
+    }
+
     const modes = new Set(draft.files.map((f) => f.colorMode));
     const printMode =
       modes.size > 1 ? "Mixed" : modes.has("keep") ? "Keep detected color" : "Black & white";
@@ -94,11 +133,27 @@ export default function CheckoutPage() {
       binding: anyBound ? "Binding added" : "No binding",
     };
 
-    localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify([orderItem, ...readDemoOrders()]));
-
     if (supabase && isSupabaseConfigured) {
       try {
-        await supabase.from("orders").insert({
+        const documents = [];
+        for (const file of draft.files) {
+          const filePath = await uploadOrderFile(orderId, file.file);
+          if (!filePath) {
+            throw new Error(`Could not upload "${file.file.name}". Check the connection and try again.`);
+          }
+          documents.push({
+            order_id: orderId,
+            file_name: file.file.name,
+            file_path: filePath,
+            file_size: file.file.size,
+            total_pages: file.pages,
+            color_pages: file.colorCoverage.filter((coverage) => coverage > 0.005).length,
+            bw_pages: file.pages - file.colorCoverage.filter((coverage) => coverage > 0.005).length,
+            selected_pages: file.pageSelection,
+          });
+        }
+
+        const { error: orderError } = await supabase.from("orders").insert({
           id: orderId,
           customer_name: draft.customer,
           device_id: draft.deviceId,
@@ -112,25 +167,18 @@ export default function CheckoutPage() {
           binding: orderItem.binding,
           copies: draft.files[0]?.copies ?? 1,
         });
+        if (orderError) throw orderError;
 
-        for (const file of draft.files) {
-          // Placeholder files restored after a refresh have size 0 — skip upload.
-          const filePath = file.file.size > 0 ? await uploadOrderFile(orderId, file.file) : "";
-          const colorCount = file.colorCoverage.filter((c) => c > 0.005).length;
-          await supabase.from("order_documents").insert({
-            order_id: orderId,
-            file_name: file.file.name,
-            file_path: filePath ?? "",
-            file_size: file.file.size,
-            total_pages: file.pages,
-            color_pages: colorCount,
-            bw_pages: file.pages - colorCount,
-            selected_pages: file.pageSelection,
-          });
-        }
+        const { error: documentsError } = await supabase.from("order_documents").insert(documents);
+        if (documentsError) throw documentsError;
       } catch (err) {
         console.warn("Supabase order sync error:", err);
+        setError(err instanceof Error ? err.message : "Could not save the order. Please try again.");
+        setPlacing(false);
+        return;
       }
+    } else {
+      localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify([orderItem, ...readDemoOrders()]));
     }
 
     setPlacing(false);
