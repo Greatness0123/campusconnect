@@ -182,7 +182,7 @@ export default function AdminPage() {
           .select("*, order_documents(*)")
           .order("created_at", { ascending: false });
 
-        if (!error && dbOrders && dbOrders.length > 0) {
+        if (!error && dbOrders) {
           const mapped: DemoOrder[] = dbOrders.map((o) => ({
             id: o.id,
             customer: o.customer_name,
@@ -366,7 +366,7 @@ export default function AdminPage() {
   const newCount = orders.filter((o) => o.status === "New").length;
   const printingCount = orders.filter((o) => o.status === "Printing").length;
   const readyCount = orders.filter((o) => o.status === "Ready").length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const totalRevenue = activeOrders.reduce((sum, order) => sum + (order.total || 0), 0);
 
   return (
     <main className="admin-shell">
