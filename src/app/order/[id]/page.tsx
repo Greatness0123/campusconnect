@@ -179,7 +179,7 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
       ? "Your print is ready!"
       : order.status === "Printing"
         ? "We're printing your pages"
-        : "You're officially in the queue";
+        : "You're officially in smart";
 
   return (
     <main className="app-shell">
