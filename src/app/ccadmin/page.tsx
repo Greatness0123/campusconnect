@@ -393,7 +393,7 @@ export default function AdminPage() {
             </p> */}
             <h1>
               Print Queue
-              <span className="admin-badge-count">{orders.length}</span>
+              {/* <span className="admin-badge-count">{orders.length}</span> */}
             </h1>
             {/* <p className="setting-desc">
               Real-time incoming print requests and customer document fetching.
