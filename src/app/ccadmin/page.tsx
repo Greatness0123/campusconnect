@@ -86,6 +86,8 @@ export default function AdminPage() {
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
 
   const [orders, setOrders] = useState<DemoOrder[]>([]);
+  const [totalOrderCount, setTotalOrderCount] = useState<number | null>(null);
+  const [orderLoadError, setOrderLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<OrderFilter>("Active");
   const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
   const [keepAliveLoading, setKeepAliveLoading] = useState(false);
@@ -177,12 +179,13 @@ export default function AdminPage() {
     // 1. If Supabase is connected, fetch live orders from database
     if (supabase && isSupabaseConfigured) {
       try {
-        const { data: dbOrders, error } = await supabase
+        const { data: dbOrders, error, count } = await supabase
           .from("orders")
-          .select("*, order_documents(*)")
+          .select("*, order_documents(*)", { count: "exact" })
           .order("created_at", { ascending: false });
 
-        if (!error && dbOrders) {
+        if (error) throw error;
+        if (dbOrders) {
           const mapped: DemoOrder[] = dbOrders.map((o) => ({
             id: o.id,
             customer: o.customer_name,
@@ -204,15 +207,24 @@ export default function AdminPage() {
             })),
           }));
           setOrders(mapped);
+          setTotalOrderCount(count ?? dbOrders.length);
+          setOrderLoadError(null);
           return;
         }
       } catch (err) {
         console.warn("Failed to fetch from Supabase:", err);
+        setOrders([]);
+        setTotalOrderCount(null);
+        setOrderLoadError("Could not load orders from the database. Check the connection and try again.");
+        return;
       }
     }
 
     // 2. Fallback to localStorage orders
-    setOrders(readDemoOrders());
+    const demoOrders = readDemoOrders();
+    setOrders(demoOrders);
+    setTotalOrderCount(demoOrders.length);
+    setOrderLoadError(null);
   }, []);
 
   // Load + subscribe to live orders only after the gate is unlocked.
@@ -425,8 +437,10 @@ export default function AdminPage() {
         <div className="admin-quick-stats">
           <div className="admin-stat-card highlight">
             <span className="stat-label">Total Orders</span>
-            <span className="admin-stat-value">{orders.length}</span>
-            <span className="admin-stat-sub">All time in queue</span>
+            <span className="admin-stat-value">{totalOrderCount ?? "—"}</span>
+            <span className="admin-stat-sub">
+              {orderLoadError ? "Database unavailable" : isSupabaseConfigured ? "All database records" : "All local orders"}
+            </span>
           </div>
           <div className="admin-stat-card">
             <span className="stat-label">New</span>
@@ -486,6 +500,13 @@ export default function AdminPage() {
           <div className="admin-alert" role="alert" style={{ marginBottom: 18 }}>
             <AlertCircle size={16} />
             <p>{statusError}</p>
+          </div>
+        )}
+
+        {orderLoadError && (
+          <div className="admin-alert" role="alert" style={{ marginBottom: 18 }}>
+            <AlertCircle size={16} />
+            <p>{orderLoadError}</p>
           </div>
         )}
 
