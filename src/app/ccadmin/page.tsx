@@ -200,6 +200,7 @@ export default function AdminPage() {
             sides: o.sides,
             stapling: o.stapling,
             binding: o.binding,
+            paymentReceiptPath: o.payment_receipt_path ?? undefined,
             documents: (o.order_documents || []).map((d: OrderDocumentRecord) => ({
               name: d.file_name,
               pages: d.total_pages,
@@ -639,6 +640,20 @@ export default function AdminPage() {
                       <span className={`status-pill ${order.status === "Payment Not Received" ? "payment-unpaid" : order.status}`}>
                         {order.status}
                       </span>
+                      {order.paymentReceiptPath && (
+                        <button
+                          className="admin-action-btn"
+                          style={{ marginTop: 6, fontSize: 11, height: 24, padding: "0 8px", display: "flex", alignItems: "center", gap: 4 }}
+                          type="button"
+                          onClick={() => fetchDocument("Payment Receipt", order.paymentReceiptPath)}
+                          title="View uploaded payment receipt"
+                        >
+                          {downloadingId === order.paymentReceiptPath
+                            ? <RefreshCw size={11} className="admin-spin" />
+                            : <Download size={11} />}
+                          View Receipt
+                        </button>
+                      )}
                     </td>
                     <td>
                       <div className="admin-actions-cell">

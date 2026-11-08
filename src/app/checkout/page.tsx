@@ -143,7 +143,7 @@ export default function CheckoutPage() {
       });
 
       setPlacing(false);
-      router.push(`/order/${existingOrderId}`);
+      router.replace(`/order/${existingOrderId}`);
       return;
     }
 
@@ -259,7 +259,7 @@ export default function CheckoutPage() {
 
     setPlacing(false);
     clearOrderDraft();
-    router.push(`/order/${orderId}`);
+    router.replace(`/order/${orderId}`);
   }
 
   if (!draft || !quote) {

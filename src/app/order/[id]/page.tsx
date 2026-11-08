@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { QuotationModal } from "@/components/quotation-modal";
+import { ReceiptUploadModal } from "@/components/receipt-upload-modal";
 import { readDemoOrders, type DemoOrder } from "@/lib/demo-orders";
 import { formatNaira, type LocationArea } from "@/lib/print";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
@@ -43,6 +44,8 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
   const [savedFeedback, setSavedFeedback] = useState<Feedback | null>(null);
   const [showQuotation, setShowQuotation] = useState(false);
   const [dismissedUnpaidModal, setDismissedUnpaidModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptUploaded, setReceiptUploaded] = useState(false);
 
   const loadOrder = useCallback(async () => {
     if (supabase && isSupabaseConfigured) {
@@ -228,6 +231,19 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
             <div className="order-unpaid-text">
               <strong>Payment not received</strong>
               <span>The print operator flagged this order as unpaid. Please verify your transfer.</span>
+              {!receiptUploaded ? (
+                <button
+                  type="button"
+                  className="receipt-already-paid-link"
+                  onClick={() => setShowReceiptModal(true)}
+                >
+                  Already paid? Click here to upload your receipt
+                </button>
+              ) : (
+                <span className="receipt-sent-confirm">
+                  <Check size={12} /> Receipt sent — awaiting operator verification
+                </span>
+              )}
             </div>
             <button
               type="button"
@@ -441,6 +457,18 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
           </div>
         )}
       </div>
+
+      {/* Receipt upload modal */}
+      {showReceiptModal && (
+        <ReceiptUploadModal
+          orderId={order.id}
+          onClose={() => setShowReceiptModal(false)}
+          onUploaded={() => {
+            setReceiptUploaded(true);
+            setShowReceiptModal(false);
+          }}
+        />
+      )}
     </main>
   );
 }

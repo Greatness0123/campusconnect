@@ -24,6 +24,7 @@ export type OrderRecord = {
   binding: string;
   copies: number;
   created_at: string;
+  payment_receipt_path?: string;
 };
 
 export type OrderDocumentRecord = {
@@ -102,6 +103,30 @@ export async function getDocumentSignedUrl(filePath: string): Promise<string | n
     if (error || !data) return null;
     return data.signedUrl;
   } catch {
+    return null;
+  }
+}
+
+export async function uploadPaymentReceipt(orderId: string, file: File): Promise<string | null> {
+  if (!supabase) return null;
+  try {
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const filePath = `receipts/${orderId}/${Date.now()}_receipt.${ext}`;
+    const { error } = await supabase.storage
+      .from("print-documents")
+      .upload(filePath, file, { cacheControl: "3600", upsert: true });
+    if (error) {
+      console.warn("Receipt upload error:", error);
+      return null;
+    }
+    // Persist the path to the orders table
+    await supabase
+      .from("orders")
+      .update({ payment_receipt_path: filePath })
+      .eq("id", orderId);
+    return filePath;
+  } catch (err) {
+    console.warn("Error uploading payment receipt:", err);
     return null;
   }
 }

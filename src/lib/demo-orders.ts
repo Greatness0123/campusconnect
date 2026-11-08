@@ -15,6 +15,7 @@ export type DemoOrder = {
   createdAt: string;
   status: DemoOrderStatus;
   paymentNotReceived?: boolean;
+  paymentReceiptPath?: string;
   fulfilment?: "collection" | "delivery";
   documents: { name: string; pages: number; selectedPages: number[]; copies: number; filePath?: string }[];
   total: number;
