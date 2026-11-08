@@ -63,12 +63,32 @@ export default function CheckoutPage() {
   const [showQuotation, setShowQuotation] = useState(false);
   const [copiedAccount, setCopiedAccount] = useState(false);
   const [existingOrderId, setExistingOrderId] = useState<string | null>(null);
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const requestedOrderId = urlParams?.get("orderId");
     if (requestedOrderId) {
       setExistingOrderId(requestedOrderId);
+
+      // Look up live status so we can show "Completed" state if already collected
+      async function fetchStatus() {
+        if (supabase && isSupabaseConfigured) {
+          try {
+            const { data } = await supabase
+              .from("orders")
+              .select("status")
+              .eq("id", requestedOrderId)
+              .maybeSingle();
+            if (data?.status) setOrderStatus(data.status as string);
+            return;
+          } catch { /* fall through to local */ }
+        }
+        // Fallback: localStorage demo orders
+        const local = readDemoOrders().find((o) => o.id === requestedOrderId);
+        if (local) setOrderStatus(local.status);
+      }
+      void fetchStatus();
     }
 
     const existing = getOrderDraft() || getPlacedOrderDraft(requestedOrderId || undefined);
@@ -460,7 +480,7 @@ export default function CheckoutPage() {
         </div>
 
         {/* Account Details Box (appears when hostel is picked & phone number entered) */}
-        {isReadyForPayment && (
+        {isReadyForPayment && orderStatus !== "Completed" && (
           <div className="checkout-section account-details-section">
             <div className="account-details-header">
               <h3 className="setting-title">Payment Account Details</h3>
@@ -508,32 +528,50 @@ export default function CheckoutPage() {
 
         {error && <p className="inline-alert checkout-error">{error}</p>}
 
-        <button
-          className={`pill-button checkout-submit ${isReadyForPayment ? "paid-btn" : ""}`}
-          type="button"
-          disabled={placing}
-          onClick={placeOrder}
-        >
-          {placing ? (
-            <>
-              <LoaderCircle className="spin" size={16} /> Processing…
-            </>
-          ) : isReadyForPayment ? (
-            <>
-              <Check size={17} /> I have paid · {formatNaira(quote.total)} <ArrowRight size={17} />
-            </>
-          ) : (
-            <>
-              Ready to print? {formatNaira(quote.total)} <ArrowRight size={17} />
-            </>
-          )}
-        </button>
+        {orderStatus === "Completed" ? (
+          /* ── Order already collected — show banner, block re-submission ── */
+          <div className="checkout-completed-banner">
+            <div className="checkout-completed-icon">
+              <Check size={22} />
+            </div>
+            <div className="checkout-completed-text">
+              <strong>Order completed</strong>
+              <span>This order has already been collected. No further action is needed.</span>
+            </div>
+            <Link className="admin-action-btn primary" href={`/order/${existingOrderId}`}>
+              View order →
+            </Link>
+          </div>
+        ) : (
+          <>
+            <button
+              className={`pill-button checkout-submit ${isReadyForPayment ? "paid-btn" : ""}`}
+              type="button"
+              disabled={placing}
+              onClick={placeOrder}
+            >
+              {placing ? (
+                <>
+                  <LoaderCircle className="spin" size={16} /> Processing…
+                </>
+              ) : isReadyForPayment ? (
+                <>
+                  <Check size={17} /> I have paid · {formatNaira(quote.total)} <ArrowRight size={17} />
+                </>
+              ) : (
+                <>
+                  Ready to print? {formatNaira(quote.total)} <ArrowRight size={17} />
+                </>
+              )}
+            </button>
 
-        <p className="checkout-footnote">
-          {isReadyForPayment
-            ? "Once you've made your bank transfer, tap 'I have paid' to send your order into the print queue."
-            : "Select your hostel and enter your phone number to reveal transfer account details."}
-        </p>
+            <p className="checkout-footnote">
+              {isReadyForPayment
+                ? "Once you've made your bank transfer, tap 'I have paid' to send your order into the print queue."
+                : "Select your hostel and enter your phone number to reveal transfer account details."}
+            </p>
+          </>
+        )}
 
         {/* Quotation preview & download modal */}
         <QuotationModal
