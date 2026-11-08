@@ -315,7 +315,8 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
             </div>
           ))}
 
-          {/* Persistent memory return to payment row */}
+          {/* Persistent memory return to payment row — hidden once collected */}
+          {order.status !== "Completed" && (
           <div className="order-return-payment-box">
             <div className="order-return-payment-info">
               <strong>Need to make or verify payment?</strong>
@@ -329,6 +330,7 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
               <ArrowLeft size={13} /> Return to payment
             </button>
           </div>
+          )}
         </div>
 
         {/* Feedback */}

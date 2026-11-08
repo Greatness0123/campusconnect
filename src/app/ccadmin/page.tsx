@@ -636,22 +636,13 @@ export default function AdminPage() {
                     </td>
                     <td>
                       <div className="admin-actions-cell">
-                        {order.status === "New" && (
+                        {(order.status === "New" || order.status === "Payment Not Received") && (
                           <button
                             className="admin-action-btn primary"
                             type="button"
                             onClick={() => changeStatus(order.id, "Printing")}
                           >
                             <Printer size={13} /> Start Print
-                          </button>
-                        )}
-                        {order.status === "Payment Not Received" && (
-                          <button
-                            className="admin-action-btn primary"
-                            type="button"
-                            onClick={() => changeStatus(order.id, "Printing")}
-                          >
-                            <Printer size={13} /> Proceed Print
                           </button>
                         )}
                         {order.status === "Printing" && (
