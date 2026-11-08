@@ -95,6 +95,7 @@ export default function AdminPage() {
   const [keepAliveStatus, setKeepAliveStatus] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   // Verify an existing session token against the server on mount.
   useEffect(() => {
@@ -270,9 +271,11 @@ export default function AdminPage() {
   }, [authState, fetchOrders]);
 
   async function changeStatus(id: string, status: DemoOrder["status"]) {
+    if (pendingId) return; // prevent double-fire
+    setPendingId(id);
     setStatusError(null);
-    if (supabase && isSupabaseConfigured) {
-      try {
+    try {
+      if (supabase && isSupabaseConfigured) {
         const { data, error } = await supabase
           .from("orders")
           .update({ status })
@@ -284,18 +287,21 @@ export default function AdminPage() {
         setOrders((current) =>
           current.map((order) => (order.id === id ? { ...order, status } : order))
         );
-      } catch (err) {
-        console.warn("Failed to update status in Supabase:", err);
-        setStatusError(
-          err instanceof Error ? `Status update failed: ${err.message}` : "Status update failed. Check the connection and try again."
-        );
+        return;
       }
-      return;
-    }
 
-    const updated = orders.map((order) => (order.id === id ? { ...order, status } : order));
-    setOrders(updated);
-    localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify(updated));
+      // Fallback: localStorage
+      const updated = orders.map((order) => (order.id === id ? { ...order, status } : order));
+      setOrders(updated);
+      localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.warn("Failed to update status in Supabase:", err);
+      setStatusError(
+        err instanceof Error ? `Status update failed: ${err.message}` : "Status update failed. Check the connection and try again."
+      );
+    } finally {
+      setPendingId(null);
+    }
   }
 
   async function fetchDocument(docName: string, filePath?: string) {
@@ -636,33 +642,54 @@ export default function AdminPage() {
                     </td>
                     <td>
                       <div className="admin-actions-cell">
-                        {(order.status === "New" || order.status === "Payment Not Received") && (
-                          <button
-                            className="admin-action-btn primary"
-                            type="button"
-                            onClick={() => changeStatus(order.id, "Printing")}
-                          >
-                            <Printer size={13} /> Start Print
-                          </button>
-                        )}
-                        {order.status === "Printing" && (
-                          <button
-                            className="admin-action-btn primary"
-                            type="button"
-                            onClick={() => changeStatus(order.id, "Ready")}
-                          >
-                            <Check size={13} /> Mark Ready
-                          </button>
-                        )}
-                        {order.status === "Ready" && (
-                          <button
-                            className="admin-action-btn primary"
-                            type="button"
-                            onClick={() => changeStatus(order.id, "Completed")}
-                          >
-                            <Check size={13} /> Mark Collected
-                          </button>
-                        )}
+                        {(order.status === "New" || order.status === "Payment Not Received") && (() => {
+                          const isPending = pendingId === order.id;
+                          return (
+                            <button
+                              className="admin-action-btn primary"
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => changeStatus(order.id, "Printing")}
+                            >
+                              {isPending
+                                ? <RefreshCw size={13} className="admin-spin" />
+                                : <Printer size={13} />}
+                              {isPending ? "Starting…" : "Start Print"}
+                            </button>
+                          );
+                        })()}
+                        {order.status === "Printing" && (() => {
+                          const isPending = pendingId === order.id;
+                          return (
+                            <button
+                              className="admin-action-btn primary"
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => changeStatus(order.id, "Ready")}
+                            >
+                              {isPending
+                                ? <RefreshCw size={13} className="admin-spin" />
+                                : <Check size={13} />}
+                              {isPending ? "Saving…" : "Mark Ready"}
+                            </button>
+                          );
+                        })()}
+                        {order.status === "Ready" && (() => {
+                          const isPending = pendingId === order.id;
+                          return (
+                            <button
+                              className="admin-action-btn primary"
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => changeStatus(order.id, "Completed")}
+                            >
+                              {isPending
+                                ? <RefreshCw size={13} className="admin-spin" />
+                                : <Check size={13} />}
+                              {isPending ? "Saving…" : "Mark Collected"}
+                            </button>
+                          );
+                        })()}
                         {order.status === "Completed" && (
                           <span className="admin-completed-action" style={{ fontSize: 12, color: "var(--success)", display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <Check size={14} /> Completed
@@ -670,27 +697,34 @@ export default function AdminPage() {
                         )}
 
                         {/* Payment Not Received signal toggle */}
-                        {order.status !== "Completed" && (
-                          order.status === "Payment Not Received" ? (
+                        {order.status !== "Completed" && (() => {
+                          const isPending = pendingId === order.id;
+                          return order.status === "Payment Not Received" ? (
                             <button
                               className="admin-action-btn subtle"
                               type="button"
+                              disabled={isPending}
                               onClick={() => changeStatus(order.id, "New")}
                               title="Clear unpaid alert"
                             >
-                              Clear Unpaid Alert
+                              {isPending && <RefreshCw size={12} className="admin-spin" />}
+                              {isPending ? "Clearing…" : "Clear Unpaid Alert"}
                             </button>
                           ) : (
                             <button
                               className="admin-action-btn admin-danger-btn"
                               type="button"
+                              disabled={isPending}
                               onClick={() => changeStatus(order.id, "Payment Not Received")}
                               title="Send 'Payment not received' signal to student"
                             >
-                              <AlertTriangle size={12} /> Payment Not Received
+                              {isPending
+                                ? <RefreshCw size={12} className="admin-spin" />
+                                : <AlertTriangle size={12} />}
+                              {isPending ? "Sending…" : "Payment Not Received"}
                             </button>
-                          )
-                        )}
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>
