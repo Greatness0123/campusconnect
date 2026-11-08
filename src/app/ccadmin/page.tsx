@@ -2,6 +2,7 @@
 
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Bell,
   BellRing,
@@ -24,7 +25,7 @@ import {
   type OrderDocumentRecord,
 } from "@/lib/supabase";
 
-type OrderFilter = "Active" | "New" | "Printing" | "Ready" | "Completed";
+type OrderFilter = "Active" | "New" | "Printing" | "Ready" | "Unpaid" | "Completed";
 
 const TOKEN_KEY = "campusprints:ccadmin-token";
 
@@ -374,10 +375,16 @@ export default function AdminPage() {
   }
 
   const activeOrders = orders.filter((order) => order.status !== "Completed");
-  const visibleOrders = filter === "Active" ? activeOrders : orders.filter((o) => o.status === filter);
+  const visibleOrders =
+    filter === "Active"
+      ? activeOrders
+      : filter === "Unpaid"
+      ? orders.filter((o) => o.status === "Payment Not Received" || o.paymentNotReceived)
+      : orders.filter((o) => o.status === filter);
   const newCount = orders.filter((o) => o.status === "New").length;
   const printingCount = orders.filter((o) => o.status === "Printing").length;
   const readyCount = orders.filter((o) => o.status === "Ready").length;
+  const unpaidCount = orders.filter((o) => o.status === "Payment Not Received" || o.paymentNotReceived).length;
   const totalRevenue = activeOrders.reduce((sum, order) => sum + (order.total || 0), 0);
 
   return (
@@ -527,7 +534,7 @@ export default function AdminPage() {
 
         {/* Filters */}
         <div className="admin-filters">
-          {(["Active", "New", "Printing", "Ready", "Completed"] as const).map((item) => (
+          {(["Active", "New", "Printing", "Ready", "Unpaid", "Completed"] as const).map((item) => (
             <button
               key={item}
               className={`all-pages-pill ${filter === item ? "active" : ""}`}
@@ -537,6 +544,8 @@ export default function AdminPage() {
               {item}
               {item === "Active"
                 ? ` (${activeOrders.length})`
+                : item === "Unpaid"
+                ? ` (${unpaidCount})`
                 : ` (${orders.filter((o) => o.status === item).length})`}
             </button>
           ))}
@@ -621,41 +630,77 @@ export default function AdminPage() {
                       </small>
                     </td>
                     <td>
-                      <span className={`status-pill ${order.status}`}>{order.status}</span>
+                      <span className={`status-pill ${order.status === "Payment Not Received" ? "payment-unpaid" : order.status}`}>
+                        {order.status}
+                      </span>
                     </td>
                     <td>
-                      {order.status === "New" && (
-                        <button
-                          className="admin-action-btn primary"
-                          type="button"
-                          onClick={() => changeStatus(order.id, "Printing")}
-                        >
-                          <Printer size={13} /> Start Print
-                        </button>
-                      )}
-                      {order.status === "Printing" && (
-                        <button
-                          className="admin-action-btn primary"
-                          type="button"
-                          onClick={() => changeStatus(order.id, "Ready")}
-                        >
-                          <Check size={13} /> Mark Ready
-                        </button>
-                      )}
-                      {order.status === "Ready" && (
-                        <button
-                          className="admin-action-btn primary"
-                          type="button"
-                          onClick={() => changeStatus(order.id, "Completed")}
-                        >
-                          <Check size={13} /> Mark Collected
-                        </button>
-                      )}
-                      {order.status === "Completed" && (
-                        <span className="admin-completed-action" style={{ fontSize: 12, color: "var(--success)", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                          <Check size={14} /> Completed
-                        </span>
-                      )}
+                      <div className="admin-actions-cell">
+                        {order.status === "New" && (
+                          <button
+                            className="admin-action-btn primary"
+                            type="button"
+                            onClick={() => changeStatus(order.id, "Printing")}
+                          >
+                            <Printer size={13} /> Start Print
+                          </button>
+                        )}
+                        {order.status === "Payment Not Received" && (
+                          <button
+                            className="admin-action-btn primary"
+                            type="button"
+                            onClick={() => changeStatus(order.id, "Printing")}
+                          >
+                            <Printer size={13} /> Proceed Print
+                          </button>
+                        )}
+                        {order.status === "Printing" && (
+                          <button
+                            className="admin-action-btn primary"
+                            type="button"
+                            onClick={() => changeStatus(order.id, "Ready")}
+                          >
+                            <Check size={13} /> Mark Ready
+                          </button>
+                        )}
+                        {order.status === "Ready" && (
+                          <button
+                            className="admin-action-btn primary"
+                            type="button"
+                            onClick={() => changeStatus(order.id, "Completed")}
+                          >
+                            <Check size={13} /> Mark Collected
+                          </button>
+                        )}
+                        {order.status === "Completed" && (
+                          <span className="admin-completed-action" style={{ fontSize: 12, color: "var(--success)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <Check size={14} /> Completed
+                          </span>
+                        )}
+
+                        {/* Payment Not Received signal toggle */}
+                        {order.status !== "Completed" && (
+                          order.status === "Payment Not Received" ? (
+                            <button
+                              className="admin-action-btn subtle"
+                              type="button"
+                              onClick={() => changeStatus(order.id, "New")}
+                              title="Clear unpaid alert"
+                            >
+                              Clear Unpaid Alert
+                            </button>
+                          ) : (
+                            <button
+                              className="admin-action-btn admin-danger-btn"
+                              type="button"
+                              onClick={() => changeStatus(order.id, "Payment Not Received")}
+                              title="Send 'Payment not received' signal to student"
+                            >
+                              <AlertTriangle size={12} /> Payment Not Received
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

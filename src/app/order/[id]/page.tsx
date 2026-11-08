@@ -1,11 +1,23 @@
 "use client";
 
-import { Check, Copy, LoaderCircle, Star } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  Copy,
+  Download,
+  LoaderCircle,
+  Star,
+  X,
+} from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { QuotationModal } from "@/components/quotation-modal";
 import { readDemoOrders, type DemoOrder } from "@/lib/demo-orders";
-import { formatNaira } from "@/lib/print";
+import { formatNaira, type LocationArea } from "@/lib/print";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 const STEPS = [
@@ -21,6 +33,7 @@ type Feedback = { rating: number; message: string };
 
 export default function OrderTrackingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [order, setOrder] = useState<DemoOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -28,6 +41,8 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
   const [hoverRating, setHoverRating] = useState(0);
   const [message, setMessage] = useState("");
   const [savedFeedback, setSavedFeedback] = useState<Feedback | null>(null);
+  const [showQuotation, setShowQuotation] = useState(false);
+  const [dismissedUnpaidModal, setDismissedUnpaidModal] = useState(false);
 
   const loadOrder = useCallback(async () => {
     if (supabase && isSupabaseConfigured) {
@@ -38,11 +53,13 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
           .eq("id", id)
           .maybeSingle();
         if (data) {
+          const isUnpaid = data.status === "Payment Not Received";
           setOrder({
             id: data.id,
             customer: data.customer_name,
             createdAt: data.created_at,
             status: data.status as DemoOrder["status"],
+            paymentNotReceived: isUnpaid,
             documents: (data.order_documents ?? []).map((document: {
               file_name: string;
               total_pages: number;
@@ -67,7 +84,11 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
         // Fall back to the local order if the network is unavailable.
       }
     }
-    setOrder(readDemoOrders().find((o) => o.id === id) ?? null);
+    const local = readDemoOrders().find((o) => o.id === id) ?? null;
+    if (local && (local.status === "Payment Not Received" || local.paymentNotReceived)) {
+      local.paymentNotReceived = true;
+    }
+    setOrder(local);
     setLoading(false);
   }, [id]);
 
@@ -171,21 +192,53 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  const stepIndex = order.status === "New" ? 0 : order.status === "Printing" ? 1 : order.status === "Ready" ? 2 : 3;
-  const heading =
-    order.status === "Completed"
-      ? "Order completed"
-      : order.status === "Ready"
-      ? "Your print is ready!"
+  const isPaymentNotReceived =
+    order.status === "Payment Not Received" || Boolean(order.paymentNotReceived);
+
+  const stepIndex =
+    order.status === "New"
+      ? 0
       : order.status === "Printing"
-        ? "We're printing your pages"
-        : "You're officially in smart";
+      ? 1
+      : order.status === "Ready"
+      ? 2
+      : order.status === "Completed"
+      ? 3
+      : 0;
+
+  const heading = isPaymentNotReceived
+    ? "Payment not received"
+    : order.status === "Completed"
+    ? "Order completed"
+    : order.status === "Ready"
+    ? "Your print is ready!"
+    : order.status === "Printing"
+    ? "We're printing your pages"
+    : "You're officially smart";
 
   return (
     <main className="app-shell">
       <AppHeader compact />
 
       <div className="order-page">
+        {/* Payment not received banner */}
+        {isPaymentNotReceived && (
+          <div className="order-unpaid-banner">
+            <AlertTriangle size={18} />
+            <div className="order-unpaid-text">
+              <strong>Payment not received</strong>
+              <span>The print operator flagged this order as unpaid. Please verify your transfer.</span>
+            </div>
+            <button
+              type="button"
+              className="admin-action-btn primary"
+              onClick={() => router.push(`/checkout?orderId=${order.id}`)}
+            >
+              Return to payment
+            </button>
+          </div>
+        )}
+
         <div className="order-hero">
           <p className="welcome-eyebrow">ORDER STATUS</p>
           <h1 className="order-title">{heading}</h1>
@@ -194,6 +247,15 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
             <button className="order-copy-btn" type="button" onClick={copyId}>
               {copied ? <Check size={13} /> : <Copy size={13} />}
               {copied ? "Copied" : "Copy"}
+            </button>
+            <button
+              className="order-copy-btn order-quote-btn"
+              type="button"
+              onClick={() => setShowQuotation(true)}
+              title="Download official quotation preview"
+            >
+              <Download size={13} />
+              Quotation
             </button>
           </div>
         </div>
@@ -205,7 +267,7 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
               <div
                 key={step.key}
                 className={`status-step ${index < stepIndex ? "done" : ""} ${
-                  index === stepIndex ? "current" : ""
+                  index === stepIndex && !isPaymentNotReceived ? "current" : ""
                 }`}
               >
                 <div className="status-dot">{index <= stepIndex ? <Check size={14} /> : index + 1}</div>
@@ -252,6 +314,21 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
               </span>
             </div>
           ))}
+
+          {/* Persistent memory return to payment row */}
+          <div className="order-return-payment-box">
+            <div className="order-return-payment-info">
+              <strong>Need to make or verify payment?</strong>
+              <small>Your order specifications and account details are saved in memory.</small>
+            </div>
+            <button
+              type="button"
+              className="admin-action-btn"
+              onClick={() => router.push(`/checkout?orderId=${order.id}`)}
+            >
+              <ArrowLeft size={13} /> Return to payment
+            </button>
+          </div>
         </div>
 
         {/* Feedback */}
@@ -295,6 +372,72 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
         <Link className="order-home-link" href="/">
           Print something else
         </Link>
+
+        {/* Quotation preview & download modal */}
+        <QuotationModal
+          isOpen={showQuotation}
+          onClose={() => setShowQuotation(false)}
+          orderId={order.id}
+          customer={order.customer}
+          phone={order.phone}
+          area={order.area as LocationArea}
+          location={order.location}
+          fulfilment={order.fulfilment}
+          date={order.createdAt}
+          documents={order.documents}
+          total={order.total}
+          printMode={order.printMode}
+          sides={order.sides}
+          stapling={order.stapling}
+          binding={order.binding}
+        />
+
+        {/* Responsive bottom half-modal: Payment Not Received */}
+        {isPaymentNotReceived && !dismissedUnpaidModal && (
+          <div className="bottom-modal-backdrop" onClick={() => setDismissedUnpaidModal(true)}>
+            <div className="bottom-half-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="bottom-modal-handle" />
+              <div className="bottom-modal-head">
+                <div className="bottom-modal-badge">
+                  <AlertTriangle size={20} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h3>Payment not received</h3>
+                  <small>Operator Alert · {order.id}</small>
+                </div>
+                <button
+                  type="button"
+                  className="doc-close-btn"
+                  onClick={() => setDismissedUnpaidModal(true)}
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <p className="bottom-modal-msg">
+                Payment has not been received for your print order yet. Return to the payment page to verify the hostel account details and complete your transfer?
+              </p>
+
+              <div className="bottom-modal-buttons">
+                <button
+                  type="button"
+                  className="pill-button bottom-modal-primary-btn"
+                  onClick={() => router.push(`/checkout?orderId=${order.id}`)}
+                >
+                  Return to the payment page
+                </button>
+                <button
+                  type="button"
+                  className="pill-button pill-button-outline"
+                  onClick={() => setDismissedUnpaidModal(true)}
+                >
+                  I&apos;ve already sent it / Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

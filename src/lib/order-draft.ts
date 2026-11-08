@@ -19,12 +19,15 @@ export type DraftFile = {
 export type OrderDraft = {
   customer: string;
   deviceId: string;
+  phone?: string;
+  orderId?: string;
   files: DraftFile[];
   area: LocationArea;
   location: string;
 };
 
 const STORAGE_KEY = "campusprints:order-draft";
+const PLACED_DRAFTS_KEY = "campusprints:placed-drafts";
 
 // Serializable shape: real File objects are dropped (bytes can't go to JSON),
 // kept as metadata so the file cards can be restored after a refresh.
@@ -116,5 +119,45 @@ export function clearOrderDraft() {
     } catch {
       // ignore
     }
+  }
+}
+
+export function savePlacedOrderDraft(orderId: string, orderDraft: OrderDraft) {
+  if (!isBrowser()) return;
+  try {
+    const raw = localStorage.getItem(PLACED_DRAFTS_KEY);
+    const map = raw ? (JSON.parse(raw) as Record<string, PersistedDraft>) : {};
+    map[orderId] = serialize({ ...orderDraft, orderId });
+    localStorage.setItem(PLACED_DRAFTS_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function getPlacedOrderDraft(orderId?: string): OrderDraft | null {
+  if (!isBrowser()) return null;
+  try {
+    const raw = localStorage.getItem(PLACED_DRAFTS_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, PersistedDraft>;
+    let target: PersistedDraft | undefined;
+    if (orderId && map[orderId]) {
+      target = map[orderId];
+    } else {
+      // Return the most recently saved
+      const values = Object.values(map);
+      target = values[values.length - 1];
+    }
+    if (!target) return null;
+    return {
+      ...target,
+      files: target.files.map(({ fileName, fileType, ...rest }) => ({
+        ...rest,
+        previewUrls: [],
+        file: new File([], fileName || "file", { type: fileType || "" }),
+      })),
+    };
+  } catch {
+    return null;
   }
 }

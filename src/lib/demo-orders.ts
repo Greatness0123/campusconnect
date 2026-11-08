@@ -1,12 +1,22 @@
 export const DEMO_ORDERS_KEY = "campusprints:demo-orders";
 
+export type DemoOrderStatus =
+  | "New"
+  | "Printing"
+  | "Ready"
+  | "Completed"
+  | "Payment Not Received";
+
 export type DemoOrder = {
   id: string;
   deviceId?: string;
   customer: string;
+  phone?: string;
   createdAt: string;
-  status: "New" | "Printing" | "Ready" | "Completed";
-  documents: { name: string; pages: number; selectedPages: number[]; copies: number }[];
+  status: DemoOrderStatus;
+  paymentNotReceived?: boolean;
+  fulfilment?: "collection" | "delivery";
+  documents: { name: string; pages: number; selectedPages: number[]; copies: number; filePath?: string }[];
   total: number;
   area: string;
   location: string;

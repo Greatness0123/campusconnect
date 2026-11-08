@@ -3,6 +3,9 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Check,
+  Copy,
+  Download,
   LoaderCircle,
   Phone,
   Store,
@@ -13,15 +16,19 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { CustomSelect } from "@/components/custom-select";
+import { QuotationModal } from "@/components/quotation-modal";
 import { DEMO_ORDERS_KEY, type DemoOrder, readDemoOrders } from "@/lib/demo-orders";
 import {
   clearOrderDraft,
   getOrderDraft,
+  getPlacedOrderDraft,
+  savePlacedOrderDraft,
   type OrderDraft,
 } from "@/lib/order-draft";
 import {
   computeQuote,
   formatNaira,
+  getHostelAccount,
   locationOptions,
   type LocationArea,
 } from "@/lib/print";
@@ -53,9 +60,18 @@ export default function CheckoutPage() {
   const [fulfilment, setFulfilment] = useState<"collection" | "delivery">("collection");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showQuotation, setShowQuotation] = useState(false);
+  const [copiedAccount, setCopiedAccount] = useState(false);
+  const [existingOrderId, setExistingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
-    const existing = getOrderDraft();
+    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const requestedOrderId = urlParams?.get("orderId");
+    if (requestedOrderId) {
+      setExistingOrderId(requestedOrderId);
+    }
+
+    const existing = getOrderDraft() || getPlacedOrderDraft(requestedOrderId || undefined);
     if (!existing) {
       router.replace("/");
       return;
@@ -63,6 +79,12 @@ export default function CheckoutPage() {
     setDraft(existing);
     setArea(existing.area);
     setLocation(existing.location);
+    if (existing.phone) {
+      setPhone(existing.phone);
+    } else {
+      const savedPhone = localStorage.getItem("campusprints:last-phone");
+      if (savedPhone) setPhone(savedPhone);
+    }
   }, [router]);
 
   const quote = useMemo(
@@ -71,6 +93,15 @@ export default function CheckoutPage() {
   );
 
   const areaOptions = Object.keys(locationOptions) as LocationArea[];
+  const activeAccount = getHostelAccount(area, location);
+  const isReadyForPayment = Boolean(location && phone.trim().length >= 7);
+
+  function copyAccountNumber() {
+    void navigator.clipboard?.writeText(activeAccount.accountNumber).then(() => {
+      setCopiedAccount(true);
+      window.setTimeout(() => setCopiedAccount(false), 1600);
+    });
+  }
 
   async function placeOrder() {
     if (!draft || !quote || placing) return;
@@ -80,6 +111,41 @@ export default function CheckoutPage() {
     }
     setPlacing(true);
     setError(null);
+    localStorage.setItem("campusprints:last-phone", phone.trim());
+
+    // If student returned from an existing order to re-confirm payment
+    if (existingOrderId) {
+      const placedOrders = readDemoOrders();
+      const updatedOrders = placedOrders.map((o) =>
+        o.id === existingOrderId
+          ? { ...o, status: "New" as DemoOrder["status"], paymentNotReceived: false, phone: phone.trim() }
+          : o
+      );
+      localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify(updatedOrders));
+
+      if (supabase && isSupabaseConfigured) {
+        try {
+          await supabase
+            .from("orders")
+            .update({ status: "New" })
+            .eq("id", existingOrderId);
+        } catch {
+          // ignore
+        }
+      }
+
+      savePlacedOrderDraft(existingOrderId, {
+        ...draft,
+        phone: phone.trim(),
+        area,
+        location,
+        orderId: existingOrderId,
+      });
+
+      setPlacing(false);
+      router.push(`/order/${existingOrderId}`);
+      return;
+    }
 
     if (supabase && isSupabaseConfigured && draft.files.some((file) => file.file.size === 0)) {
       setError("A document is no longer available after refresh. Go back, remove it, and upload the original file again.");
@@ -116,8 +182,10 @@ export default function CheckoutPage() {
       id: orderId,
       deviceId: draft.deviceId,
       customer: draft.customer,
+      phone: phone.trim(),
       createdAt: new Date().toISOString(),
       status: "New",
+      fulfilment,
       documents: draft.files.map((file) => ({
         name: file.file.name,
         pages: file.pages,
@@ -155,7 +223,7 @@ export default function CheckoutPage() {
 
         const { error: orderError } = await supabase.from("orders").insert({
           id: orderId,
-          customer_name: draft.customer,
+          customer_name: phone.trim() ? `${draft.customer} (${phone.trim()})` : draft.customer,
           device_id: draft.deviceId,
           status: "New",
           total_amount: quote.total,
@@ -180,6 +248,14 @@ export default function CheckoutPage() {
     } else {
       localStorage.setItem(DEMO_ORDERS_KEY, JSON.stringify([orderItem, ...readDemoOrders()]));
     }
+
+    savePlacedOrderDraft(orderId, {
+      ...draft,
+      phone: phone.trim(),
+      area,
+      location,
+      orderId,
+    });
 
     setPlacing(false);
     clearOrderDraft();
@@ -206,8 +282,19 @@ export default function CheckoutPage() {
 
         <div className="receipt-card">
           <div className="receipt-header">
-            <h1>Your Print Summary</h1>
-            <span className="receipt-tag">Quote</span>
+            <div>
+              <h1>Your Print Summary</h1>
+              <span className="receipt-tag">Quote</span>
+            </div>
+            <button
+              type="button"
+              className="receipt-download-btn"
+              onClick={() => setShowQuotation(true)}
+              title="Download official quotation preview"
+            >
+              <Download size={14} />
+              <span>Download quotation</span>
+            </button>
           </div>
 
           <div className="receipt-meta">
@@ -347,7 +434,7 @@ export default function CheckoutPage() {
           </div>
           <div className="checkout-field">
             <label htmlFor="co-spot">
-              {fulfilment === "collection" ? "Pickup spot" : "Delivery spot"}
+              {fulfilment === "collection" ? "Pickup spot / Hostel" : "Delivery spot / Hostel"}
             </label>
             <CustomSelect
               id="co-spot"
@@ -372,12 +459,68 @@ export default function CheckoutPage() {
           </div>
         </div>
 
+        {/* Account Details Box (appears when hostel is picked & phone number entered) */}
+        {isReadyForPayment && (
+          <div className="checkout-section account-details-section">
+            <div className="account-details-header">
+              <h3 className="setting-title">Payment Account Details</h3>
+              <span className="account-badge">{activeAccount.badge}</span>
+            </div>
+            <p className="setting-desc" style={{ marginTop: 2, marginBottom: 14 }}>
+              Make a direct transfer to the account below for your hostel before confirming.
+            </p>
+
+            <div className="account-cards-container">
+              {/* Bank card */}
+              <div className="account-info-card">
+                <span className="account-info-label">Bank</span>
+                <strong className="account-info-value">{activeAccount.bank}</strong>
+              </div>
+
+              {/* Account name card */}
+              <div className="account-info-card">
+                <span className="account-info-label">Account name</span>
+                <strong className="account-info-value">{activeAccount.accountName}</strong>
+              </div>
+
+              {/* Account number card with copy button */}
+              <div className="account-info-card account-number-card">
+                <div className="account-info-left">
+                  <span className="account-info-label">Account number</span>
+                  <strong className="account-info-value account-number-val">
+                    {activeAccount.accountNumber}
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  className="account-copy-btn"
+                  onClick={copyAccountNumber}
+                  aria-label="Copy account number"
+                  title="Copy account number"
+                >
+                  {copiedAccount ? <Check size={18} /> : <Copy size={18} />}
+                  <span className="copy-label">{copiedAccount ? "Copied" : "Copy"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && <p className="inline-alert checkout-error">{error}</p>}
 
-        <button className="pill-button checkout-submit" type="button" disabled={placing} onClick={placeOrder}>
+        <button
+          className={`pill-button checkout-submit ${isReadyForPayment ? "paid-btn" : ""}`}
+          type="button"
+          disabled={placing}
+          onClick={placeOrder}
+        >
           {placing ? (
             <>
-              <LoaderCircle className="spin" size={16} /> Sending…
+              <LoaderCircle className="spin" size={16} /> Processing…
+            </>
+          ) : isReadyForPayment ? (
+            <>
+              <Check size={17} /> I have paid · {formatNaira(quote.total)} <ArrowRight size={17} />
             </>
           ) : (
             <>
@@ -387,8 +530,27 @@ export default function CheckoutPage() {
         </button>
 
         <p className="checkout-footnote">
-          Payments are made on pickup — cash or transfer.
+          {isReadyForPayment
+            ? "Once you've made your bank transfer, tap 'I have paid' to send your order into the print queue."
+            : "Select your hostel and enter your phone number to reveal transfer account details."}
         </p>
+
+        {/* Quotation preview & download modal */}
+        <QuotationModal
+          isOpen={showQuotation}
+          onClose={() => setShowQuotation(false)}
+          orderId={existingOrderId || "CP-QUOTE"}
+          customer={draft.customer}
+          phone={phone}
+          area={area}
+          location={location}
+          fulfilment={fulfilment}
+          quote={quote}
+          total={quote.total}
+          sides={quote.anyDuplex ? "Front & back" : "Single-sided"}
+          stapling={quote.anyStapled ? "Stapled" : undefined}
+          binding={quote.anyBound ? "Spiral bound" : undefined}
+        />
       </div>
     </main>
   );

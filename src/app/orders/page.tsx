@@ -106,7 +106,7 @@ export default function OrdersPage() {
                     <strong>{order.id}</strong>
                     <span>{new Date(order.createdAt).toLocaleString()}</span>
                   </div>
-                  <span className={`status-pill ${order.status}`}>{order.status}</span>
+                  <span className={`status-pill ${order.status === "Payment Not Received" ? "payment-unpaid" : order.status}`}>{order.status}</span>
                 </div>
                 <div className="order-history-detail">
                   <span>{order.documents.length} documents</span>

@@ -13,7 +13,8 @@ export type OrderRecord = {
   id: string;
   customer_name: string;
   device_id: string;
-  status: "New" | "Printing" | "Ready" | "Completed";
+  phone?: string;
+  status: "New" | "Printing" | "Ready" | "Completed" | "Payment Not Received";
   total_amount: number;
   pickup_area: string;
   pickup_location: string;

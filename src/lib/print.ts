@@ -41,6 +41,38 @@ export const locationOptions: Record<LocationArea, string[]> = {
   Downtown: ["Silver 2", "Silver 3", "New Hall Male", "New Hall Female", "JAC"],
 };
 
+export type HostelAccount = {
+  bank: string;
+  accountName: string;
+  accountNumber: string;
+  badge: string;
+};
+
+export const hostelAccounts: Record<LocationArea, HostelAccount> = {
+  Uptown: {
+    bank: "Kuda MFB",
+    accountName: "Campus Co Enterprise",
+    accountNumber: "3003135742",
+    badge: "Uptown",
+  },
+  Middletown: {
+    bank: "Kuda MFB",
+    accountName: "Campus Co Enterprise - Hall B",
+    accountNumber: "3004376180",
+    badge: "Middletown · Hall B",
+  },
+  Downtown: {
+    bank: "Kuda MFB",
+    accountName: "Campus Co Enterprise - Silver 2",
+    accountNumber: "3004418439",
+    badge: "Downtown · Silver 2",
+  },
+};
+
+export function getHostelAccount(area: LocationArea, _location?: string): HostelAccount {
+  return hostelAccounts[area] ?? hostelAccounts.Uptown;
+}
+
 export const pricing = {
   mono: 100,
   colorLight: 150,
