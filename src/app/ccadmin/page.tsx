@@ -25,7 +25,7 @@ import {
   type OrderDocumentRecord,
 } from "@/lib/supabase";
 
-type OrderFilter = "Active" | "New" | "Printing" | "Ready" | "Unpaid" | "Completed";
+type OrderFilter = "Active" | "Printing" | "Completed";
 
 const TOKEN_KEY = "campusprints:ccadmin-token";
 
@@ -385,8 +385,6 @@ export default function AdminPage() {
   const visibleOrders =
     filter === "Active"
       ? activeOrders
-      : filter === "Unpaid"
-      ? orders.filter((o) => o.status === "Payment Not Received" || o.paymentNotReceived)
       : orders.filter((o) => o.status === filter);
   const newCount = orders.filter((o) => o.status === "New").length;
   const printingCount = orders.filter((o) => o.status === "Printing").length;
@@ -541,7 +539,7 @@ export default function AdminPage() {
 
         {/* Filters */}
         <div className="admin-filters">
-          {(["Active", "New", "Printing", "Ready", "Unpaid", "Completed"] as const).map((item) => (
+          {(["Active", "Printing", "Completed"] as const).map((item) => (
             <button
               key={item}
               className={`all-pages-pill ${filter === item ? "active" : ""}`}
@@ -551,8 +549,6 @@ export default function AdminPage() {
               {item}
               {item === "Active"
                 ? ` (${activeOrders.length})`
-                : item === "Unpaid"
-                ? ` (${unpaidCount})`
                 : ` (${orders.filter((o) => o.status === item).length})`}
             </button>
           ))}
