@@ -17,7 +17,8 @@ import { use, useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { QuotationModal } from "@/components/quotation-modal";
 import { ReceiptUploadModal } from "@/components/receipt-upload-modal";
-import { readDemoOrders, type DemoOrder } from "@/lib/demo-orders";
+import { readDemoOrders, type DemoOrder, type DemoOrderDocument } from "@/lib/demo-orders";
+import { getPlacedOrderDraft } from "@/lib/order-draft";
 import { formatNaira, type LocationArea } from "@/lib/print";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
@@ -47,6 +48,67 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptUploaded, setReceiptUploaded] = useState(false);
 
+function enrichOrderDocuments(order: DemoOrder): DemoOrder {
+  const placedDraft = getPlacedOrderDraft(order.id);
+  const enrichedDocs = order.documents.map((doc, idx) => {
+    const draftFile =
+      placedDraft?.files.find((f) => f.file?.name === doc.name) ||
+      placedDraft?.files[idx];
+
+    const colorMode =
+      doc.colorMode ||
+      (draftFile?.colorMode
+        ? draftFile.colorMode === "keep"
+          ? "Colour"
+          : "Black & white"
+        : undefined);
+
+    const sides =
+      doc.sides ||
+      (draftFile?.sides
+        ? draftFile.sides === "duplex"
+          ? "Front & back"
+          : "Single-sided"
+        : undefined);
+
+    const stapling =
+      doc.stapling ||
+      (draftFile?.stapled !== undefined
+        ? draftFile.stapled
+          ? "Stapled"
+          : "No stapling"
+        : undefined);
+
+    const binding =
+      doc.binding ||
+      (draftFile?.bound !== undefined
+        ? draftFile.bound
+          ? "Binding added"
+          : "No binding"
+        : undefined);
+
+    const pageSelection =
+      doc.pageSelection ||
+      (draftFile?.pageSelection && draftFile.pageSelection !== "all"
+        ? draftFile.pageSelection
+        : undefined);
+
+    const copies = doc.copies || draftFile?.copies || 1;
+
+    return {
+      ...doc,
+      colorMode,
+      sides,
+      stapling,
+      binding,
+      pageSelection,
+      copies,
+    };
+  });
+
+  return { ...order, documents: enrichedDocs };
+}
+
   const loadOrder = useCallback(async () => {
     if (supabase && isSupabaseConfigured) {
       try {
@@ -57,29 +119,59 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
           .maybeSingle();
         if (data) {
           const isUnpaid = data.status === "Payment Not Received";
-          setOrder({
-            id: data.id,
-            customer: data.customer_name,
-            createdAt: data.created_at,
-            status: data.status as DemoOrder["status"],
-            paymentNotReceived: isUnpaid,
-            documents: (data.order_documents ?? []).map((document: {
-              file_name: string;
-              total_pages: number;
-            }) => ({
+          const rawDocs = (data.order_documents ?? []).map((document: {
+            file_name: string;
+            total_pages: number;
+            selected_pages?: string;
+            color_pages?: number;
+          }) => {
+            let parsedSpec: Partial<DemoOrderDocument> = {};
+            if (document.selected_pages && document.selected_pages.startsWith("{")) {
+              try {
+                const parsed = JSON.parse(document.selected_pages);
+                parsedSpec = {
+                  colorMode: parsed.colorMode,
+                  sides: parsed.sides,
+                  stapling: parsed.stapling,
+                  binding: parsed.binding,
+                  pageSelection: parsed.selection,
+                  copies: parsed.copies,
+                };
+              } catch {
+                // ignore
+              }
+            }
+
+            return {
               name: document.file_name,
               pages: document.total_pages,
               selectedPages: [],
-              copies: data.copies || 1,
-            })),
-            total: data.total_amount,
-            area: data.pickup_area,
-            location: data.pickup_location,
-            printMode: data.print_mode,
-            sides: data.sides,
-            stapling: data.stapling,
-            binding: data.binding,
+              copies: parsedSpec.copies || data.copies || 1,
+              colorMode: parsedSpec.colorMode || ((document.color_pages ?? 0) > 0 ? "Colour" : "Black & white"),
+              sides: parsedSpec.sides || data.sides,
+              stapling: parsedSpec.stapling || data.stapling,
+              binding: parsedSpec.binding || data.binding,
+              pageSelection: parsedSpec.pageSelection || (document.selected_pages !== "all" ? document.selected_pages : undefined),
+            };
           });
+
+          setOrder(
+            enrichOrderDocuments({
+              id: data.id,
+              customer: data.customer_name,
+              createdAt: data.created_at,
+              status: data.status as DemoOrder["status"],
+              paymentNotReceived: isUnpaid,
+              documents: rawDocs,
+              total: data.total_amount,
+              area: data.pickup_area,
+              location: data.pickup_location,
+              printMode: data.print_mode,
+              sides: data.sides,
+              stapling: data.stapling,
+              binding: data.binding,
+            })
+          );
           setLoading(false);
           return;
         }
@@ -91,7 +183,7 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
     if (local && (local.status === "Payment Not Received" || local.paymentNotReceived)) {
       local.paymentNotReceived = true;
     }
-    setOrder(local);
+    setOrder(local ? enrichOrderDocuments(local) : null);
     setLoading(false);
   }, [id]);
 
@@ -279,20 +371,23 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
         {/* Status stepper */}
         <div className="order-card">
           <div className="status-stepper">
-            {STEPS.map((step, index) => (
-              <div
-                key={step.key}
-                className={`status-step ${index < stepIndex ? "done" : ""} ${
-                  index === stepIndex && !isPaymentNotReceived ? "current" : ""
-                }`}
-              >
-                <div className="status-dot">{index <= stepIndex ? <Check size={14} /> : index + 1}</div>
-                <div className="status-meta">
-                  <strong>{step.label}</strong>
-                  <span>{step.desc}</span>
+            {STEPS.map((step, index) => {
+              const isCompleted = order.status === "Completed";
+              const isDone = isCompleted ? true : index < stepIndex;
+              const isCurrent = !isCompleted && index === stepIndex && !isPaymentNotReceived;
+              return (
+                <div
+                  key={step.key}
+                  className={`status-step ${isDone ? "done" : ""} ${isCurrent ? "current" : ""}`}
+                >
+                  <div className="status-dot">{isDone || isCurrent ? <Check size={14} /> : index + 1}</div>
+                  <div className="status-meta">
+                    <strong>{step.label}</strong>
+                    <span>{step.desc}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -321,13 +416,33 @@ export default function OrderTrackingPage({ params }: { params: Promise<{ id: st
             </strong>
           </div>
           {order.documents.map((doc, index) => (
-            <div className="order-doc-row" key={`${doc.name}-${index}`}>
-              <span className="order-doc-name" title={doc.name}>
-                {doc.name}
-              </span>
-              <span>
-                {doc.pages}p × {doc.copies}
-              </span>
+            <div className="order-doc-row" key={`${doc.name}-${index}`} style={{ flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                <span className="order-doc-name" title={doc.name}>
+                  {order.documents.length > 1 && (
+                    <span style={{ color: "var(--accent, #6366f1)", fontSize: 11, fontWeight: 700, marginRight: 6 }}>
+                      #{index + 1}
+                    </span>
+                  )}
+                  {doc.name}
+                </span>
+                <span>
+                  {doc.pages}p × {doc.copies}
+                </span>
+              </div>
+              {(doc.colorMode || doc.sides || doc.stapling || doc.binding) && (
+                <small style={{ color: "var(--muted)", fontSize: 11 }}>
+                  {[
+                    doc.colorMode,
+                    doc.sides,
+                    doc.stapling,
+                    doc.binding,
+                    doc.pageSelection && doc.pageSelection !== "all" ? `Pages: ${doc.pageSelection}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </small>
+              )}
             </div>
           ))}
 

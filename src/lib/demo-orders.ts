@@ -7,6 +7,19 @@ export type DemoOrderStatus =
   | "Completed"
   | "Payment Not Received";
 
+export type DemoOrderDocument = {
+  name: string;
+  pages: number;
+  selectedPages: number[];
+  copies: number;
+  filePath?: string;
+  colorMode?: string;
+  sides?: string;
+  stapling?: string;
+  binding?: string;
+  pageSelection?: string;
+};
+
 export type DemoOrder = {
   id: string;
   deviceId?: string;
@@ -17,7 +30,7 @@ export type DemoOrder = {
   paymentNotReceived?: boolean;
   paymentReceiptPath?: string;
   fulfilment?: "collection" | "delivery";
-  documents: { name: string; pages: number; selectedPages: number[]; copies: number; filePath?: string }[];
+  documents: DemoOrderDocument[];
   total: number;
   area: string;
   location: string;

@@ -35,16 +35,17 @@ import {
 import { isSupabaseConfigured, supabase, uploadOrderFile } from "@/lib/supabase";
 
 const LOCAL_ORDER_COUNTER_KEY = "campusprints:order-counter";
+const ORDER_ID_MIN = 154; // next order starts at CP-000154
 
 function getLocalOrderId() {
   const savedNumber = Number(localStorage.getItem(LOCAL_ORDER_COUNTER_KEY));
-  let nextNumber = Number.isSafeInteger(savedNumber) && savedNumber > 0 ? savedNumber : 1;
+  let nextNumber = Number.isSafeInteger(savedNumber) && savedNumber >= ORDER_ID_MIN ? savedNumber : ORDER_ID_MIN;
   const existingIds = new Set(readDemoOrders().map((order) => order.id));
-  let orderId = `CP-${String(nextNumber).padStart(4, "0")}`;
+  let orderId = `CP-${String(nextNumber).padStart(6, "0")}`;
 
   while (existingIds.has(orderId)) {
     nextNumber += 1;
-    orderId = `CP-${String(nextNumber).padStart(4, "0")}`;
+    orderId = `CP-${String(nextNumber).padStart(6, "0")}`;
   }
 
   localStorage.setItem(LOCAL_ORDER_COUNTER_KEY, String(nextNumber + 1));
@@ -211,6 +212,11 @@ export default function CheckoutPage() {
         pages: file.pages,
         selectedPages: [],
         copies: file.copies,
+        colorMode: file.colorMode === "keep" ? "Colour" : "Black & white",
+        sides: file.sides === "duplex" ? "Front & back" : "Single-sided",
+        stapling: file.stapled ? "Stapled" : "No stapling",
+        binding: file.bound ? "Binding added" : "No binding",
+        pageSelection: file.pageSelection || "all",
       })),
       total: quote.total,
       area,
@@ -237,7 +243,14 @@ export default function CheckoutPage() {
             total_pages: file.pages,
             color_pages: file.colorCoverage.filter((coverage) => coverage > 0.005).length,
             bw_pages: file.pages - file.colorCoverage.filter((coverage) => coverage > 0.005).length,
-            selected_pages: file.pageSelection,
+            selected_pages: JSON.stringify({
+              selection: file.pageSelection || "all",
+              colorMode: file.colorMode === "keep" ? "Colour" : "Black & white",
+              sides: file.sides === "duplex" ? "Front & back" : "Single-sided",
+              stapling: file.stapled ? "Stapled" : "No stapling",
+              binding: file.bound ? "Binding added" : "No binding",
+              copies: file.copies,
+            }),
           });
         }
 

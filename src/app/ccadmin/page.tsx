@@ -16,7 +16,8 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
-import { DEMO_ORDERS_KEY, type DemoOrder, readDemoOrders } from "@/lib/demo-orders";
+import { DEMO_ORDERS_KEY, type DemoOrder, type DemoOrderDocument, readDemoOrders } from "@/lib/demo-orders";
+import { getPlacedOrderDraft } from "@/lib/order-draft";
 import {
   supabase,
   isSupabaseConfigured,
@@ -25,7 +26,7 @@ import {
   type OrderDocumentRecord,
 } from "@/lib/supabase";
 
-type OrderFilter = "Active" | "Printing" | "Completed";
+type OrderFilter = "Active" | "Ready" | "Completed";
 
 const TOKEN_KEY = "campusprints:ccadmin-token";
 
@@ -74,6 +75,67 @@ async function notifyNewOrder(title: string, body: string) {
   } catch {
     // Notifications unavailable
   }
+}
+
+function enrichOrderDocuments(order: DemoOrder): DemoOrder {
+  const placedDraft = getPlacedOrderDraft(order.id);
+  const enrichedDocs = order.documents.map((doc, idx) => {
+    const draftFile =
+      placedDraft?.files.find((f) => f.file?.name === doc.name) ||
+      placedDraft?.files[idx];
+
+    const colorMode =
+      doc.colorMode ||
+      (draftFile?.colorMode
+        ? draftFile.colorMode === "keep"
+          ? "Colour"
+          : "Black & white"
+        : undefined);
+
+    const sides =
+      doc.sides ||
+      (draftFile?.sides
+        ? draftFile.sides === "duplex"
+          ? "Front & back"
+          : "Single-sided"
+        : undefined);
+
+    const stapling =
+      doc.stapling ||
+      (draftFile?.stapled !== undefined
+        ? draftFile.stapled
+          ? "Stapled"
+          : "No stapling"
+        : undefined);
+
+    const binding =
+      doc.binding ||
+      (draftFile?.bound !== undefined
+        ? draftFile.bound
+          ? "Binding added"
+          : "No binding"
+        : undefined);
+
+    const pageSelection =
+      doc.pageSelection ||
+      (draftFile?.pageSelection && draftFile.pageSelection !== "all"
+        ? draftFile.pageSelection
+        : undefined);
+
+    const copies = doc.copies || draftFile?.copies || 1;
+
+    return {
+      ...doc,
+      colorMode,
+      sides,
+      stapling,
+      binding,
+      pageSelection,
+      copies,
+    };
+  });
+
+  return { ...order, documents: enrichedDocs };
 }
 
 export default function AdminPage() {
@@ -188,27 +250,55 @@ export default function AdminPage() {
 
         if (error) throw error;
         if (dbOrders) {
-          const mapped: DemoOrder[] = dbOrders.map((o) => ({
-            id: o.id,
-            customer: o.customer_name,
-            createdAt: o.created_at,
-            status: o.status as DemoOrder["status"],
-            total: o.total_amount,
-            area: o.pickup_area,
-            location: o.pickup_location,
-            printMode: o.print_mode,
-            sides: o.sides,
-            stapling: o.stapling,
-            binding: o.binding,
-            paymentReceiptPath: o.payment_receipt_path ?? undefined,
-            documents: (o.order_documents || []).map((d: OrderDocumentRecord) => ({
-              name: d.file_name,
-              pages: d.total_pages,
-              selectedPages: d.selected_pages === "all" ? [] : [1],
-              copies: o.copies || 1,
-              filePath: d.file_path,
-            })),
-          }));
+          const mapped: DemoOrder[] = dbOrders.map((o) => {
+            const rawDocs = (o.order_documents || []).map((d: OrderDocumentRecord) => {
+              let parsedSpec: Partial<DemoOrderDocument> = {};
+              if (d.selected_pages && d.selected_pages.startsWith("{")) {
+                try {
+                  const parsed = JSON.parse(d.selected_pages);
+                  parsedSpec = {
+                    colorMode: parsed.colorMode,
+                    sides: parsed.sides,
+                    stapling: parsed.stapling,
+                    binding: parsed.binding,
+                    pageSelection: parsed.selection,
+                    copies: parsed.copies,
+                  };
+                } catch {
+                  // ignore
+                }
+              }
+
+              return {
+                name: d.file_name,
+                pages: d.total_pages,
+                selectedPages: d.selected_pages === "all" ? [] : [1],
+                copies: parsedSpec.copies || o.copies || 1,
+                filePath: d.file_path,
+                colorMode: parsedSpec.colorMode || (d.color_pages > 0 ? "Colour" : "Black & white"),
+                sides: parsedSpec.sides || o.sides,
+                stapling: parsedSpec.stapling || o.stapling,
+                binding: parsedSpec.binding || o.binding,
+                pageSelection: parsedSpec.pageSelection || (d.selected_pages !== "all" ? d.selected_pages : undefined),
+              };
+            });
+
+            return enrichOrderDocuments({
+              id: o.id,
+              customer: o.customer_name,
+              createdAt: o.created_at,
+              status: o.status as DemoOrder["status"],
+              total: o.total_amount,
+              area: o.pickup_area,
+              location: o.pickup_location,
+              printMode: o.print_mode,
+              sides: o.sides,
+              stapling: o.stapling,
+              binding: o.binding,
+              paymentReceiptPath: o.payment_receipt_path ?? undefined,
+              documents: rawDocs,
+            });
+          });
           setOrders(mapped);
           setTotalOrderCount(count ?? dbOrders.length);
           setOrderLoadError(null);
@@ -224,7 +314,7 @@ export default function AdminPage() {
     }
 
     // 2. Fallback to localStorage orders
-    const demoOrders = readDemoOrders();
+    const demoOrders = readDemoOrders().map(enrichOrderDocuments);
     setOrders(demoOrders);
     setTotalOrderCount(demoOrders.length);
     setOrderLoadError(null);
@@ -539,7 +629,7 @@ export default function AdminPage() {
 
         {/* Filters */}
         <div className="admin-filters">
-          {(["Active", "Printing", "Completed"] as const).map((item) => (
+          {(["Active","Ready","Completed"] as const).map((item) => (
             <button
               key={item}
               className={`all-pages-pill ${filter === item ? "active" : ""}`}
@@ -568,8 +658,12 @@ export default function AdminPage() {
                 <tr>
                   <th>Order / Time</th>
                   <th>Student &amp; Pickup</th>
-                  <th>Documents to Print</th>
-                  <th>Specifications</th>
+                  <th colSpan={2} style={{ padding: 0 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: "0 24px", padding: "0 12px" }}>
+                      <span>Documents to Print</span>
+                      <span>Specifications</span>
+                    </div>
+                  </th>
                   <th>Estimate</th>
                   <th>Status</th>
                   <th>Action</th>
@@ -590,41 +684,71 @@ export default function AdminPage() {
                         {order.area} · {order.location}
                       </small>
                     </td>
-                    <td>
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {order.documents.map((doc, idx) => (
-                          <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <FileText size={14} />
-                            <span className="admin-document-name">
-                              {doc.name} ({doc.pages} pages × {doc.copies} copy)
-                            </span>
-                            {/* Fetch Document to Print button */}
-                            <button
-                              className="admin-action-btn"
-                              style={{ height: 26, padding: "0 10px", fontSize: 11 }}
-                              type="button"
-                              onClick={() =>
-                                fetchDocument(
-                                  doc.name,
-                                  (doc as unknown as { filePath?: string }).filePath
-                                )
-                              }
-                              title="Fetch document file to print"
-                            >
-                              <Download size={12} />
-                              {downloadingId === (doc as unknown as { filePath?: string }).filePath
-                                ? "Fetching…"
-                                : "Fetch"}
-                            </button>
-                          </div>
-                        ))}
+                    <td colSpan={2}>
+                      <div style={{ display: "grid", gap: 0 }}>
+                        {order.documents.map((doc, idx) => {
+                          const docColor = doc.colorMode || order.printMode;
+                          const docSides = doc.sides || order.sides;
+                          const docStapling = doc.stapling || order.stapling;
+                          const docBinding = doc.binding || order.binding;
+                          const docPages =
+                            doc.pageSelection && doc.pageSelection !== "all"
+                              ? `Pages: ${doc.pageSelection}`
+                              : null;
+                          const specs = [docColor, docSides, docStapling, docBinding, docPages].filter(Boolean) as string[];
+
+                          return (
+                            <div key={idx}>
+                              {idx > 0 && (
+                                <div style={{ height: 1, background: "var(--border-color, rgba(255,255,255,0.08))", margin: "8px 0" }} />
+                              )}
+                              {/* 2-column grid: doc info left, specs right — always aligned */}
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: "0 24px", alignItems: "start" }}>
+                                {/* Left: filename + fetch */}
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                  <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                                    {order.documents.length > 1 && (
+                                      <span style={{ color: "var(--accent, #6366f1)", fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>
+                                        {idx + 1}.
+                                      </span>
+                                    )}
+                                    <FileText size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                                    <span className="admin-document-name" title={doc.name} style={{ wordBreak: "break-word", lineHeight: 1.4 }}>
+                                      {doc.name}
+                                    </span>
+                                    <small style={{ color: "var(--muted)", whiteSpace: "nowrap", flexShrink: 0, marginTop: 2 }}>
+                                      ({doc.pages} {doc.pages === 1 ? "page" : "pages"} × {doc.copies} {doc.copies === 1 ? "copy" : "copies"})
+                                    </small>
+                                  </div>
+                                  <button
+                                    className="admin-action-btn"
+                                    style={{ height: 26, padding: "0 10px", fontSize: 11, alignSelf: "flex-start" }}
+                                    type="button"
+                                    onClick={() =>
+                                      fetchDocument(
+                                        doc.name,
+                                        (doc as unknown as { filePath?: string }).filePath
+                                      )
+                                    }
+                                    title="Fetch document file to print"
+                                  >
+                                    <Download size={12} />
+                                    {downloadingId === (doc as unknown as { filePath?: string }).filePath
+                                      ? "Fetching…"
+                                      : "Fetch"}
+                                  </button>
+                                </div>
+                                {/* Right: specs stacked */}
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                  {specs.map((spec, si) => (
+                                    <span key={si} style={{ fontSize: 12, lineHeight: 1.4, whiteSpace: "nowrap" }}>{spec}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </td>
-                    <td>
-                      <div>{order.printMode}</div>
-                      <small style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>
-                        {order.sides} · {order.stapling} · {order.binding}
-                      </small>
                     </td>
                     <td>
                       <strong>{formatNaira(order.total)}</strong>
