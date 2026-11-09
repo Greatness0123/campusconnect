@@ -1084,7 +1084,7 @@ a { color: inherit; text-decoration: none; }
 }
 .admin-data-table {
   width: 100%;
-  min-width: 940px;
+  min-width: 1100px;
   border-collapse: collapse;
   text-align: left;
 }
@@ -1107,7 +1107,7 @@ a { color: inherit; text-decoration: none; }
   overflow-wrap: anywhere;
 }
 .admin-data-table td:nth-child(3) > div > div { min-width: 0; flex-wrap: wrap; }
-.admin-document-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.admin-document-name { min-width: 0; white-space: normal; overflow-wrap: break-word; word-break: normal; }
 .admin-data-table tbody tr {
   transition: background-color 0.15s ease;
 }

@@ -659,7 +659,7 @@ export default function AdminPage() {
                   <th>Order / Time</th>
                   <th>Student &amp; Pickup</th>
                   <th colSpan={2} style={{ padding: 0 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: "0 24px", padding: "0 12px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) 140px", gap: "0 24px", padding: "0 12px" }}>
                       <span>Documents to Print</span>
                       <span>Specifications</span>
                     </div>
@@ -703,7 +703,7 @@ export default function AdminPage() {
                                 <div style={{ height: 1, background: "var(--border-color, rgba(255,255,255,0.08))", margin: "8px 0" }} />
                               )}
                               {/* 2-column grid: doc info left, specs right — always aligned */}
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: "0 24px", alignItems: "start" }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) 140px", gap: "0 24px", alignItems: "start" }}>
                                 {/* Left: filename + fetch */}
                                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                                   <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
