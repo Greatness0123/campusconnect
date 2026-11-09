@@ -1,6 +1,18 @@
 import { estimateColorCoverage } from "@/lib/analysis";
 
-export const OFFICE_EXTENSIONS = ["doc", "docx", "ppt", "pptx"] as const;
+export const WORD_EXTENSIONS = ["doc", "docx", "docm", "dot", "dotx", "dotm"] as const;
+export const PPT_EXTENSIONS = [
+  "ppt",
+  "pptx",
+  "pptm",
+  "pot",
+  "potx",
+  "potm",
+  "pps",
+  "ppsx",
+  "ppsm",
+] as const;
+export const OFFICE_EXTENSIONS = [...WORD_EXTENSIONS, ...PPT_EXTENSIONS] as const;
 
 export function isOfficeFilename(name: string): boolean {
   const extension = name.split(".").pop()?.toLowerCase() ?? "";
@@ -19,6 +31,7 @@ const CONVERSION_DEADLINE_MS = 60_000;
 // Capture pages at 2.5x (240 DPI) — sharp print output while staying well
 // under mobile canvas limits and keeping conversion quick.
 const CAPTURE_SCALE = 2.5;
+const MAX_CAPTURE_DIMENSION = 2400;
 const PREVIEW_WIDTH = 480;
 const PDF_JPEG_QUALITY = 0.9;
 const PREVIEW_JPEG_QUALITY = 0.75;
@@ -66,18 +79,18 @@ function unsupportedFileError(): Error {
 }
 
 function legacyFormatError(extension: string): Error {
-  if (extension === "doc") {
+  if (extension === "doc" || extension === "dot") {
     return new Error(
-      "This is an older Word 97-2003 (.doc) file. Open it in Word and save it as .docx, then upload it again."
+      `This is an older Word 97-2003 (.${extension}) file. Open it in Word and save it as .docx, then upload it again.`
     );
   }
-  if (extension === "ppt") {
+  if (extension === "ppt" || extension === "pot" || extension === "pps") {
     return new Error(
-      "This is an older PowerPoint 97-2003 (.ppt) file. Open it in PowerPoint and save it as .pptx, then upload it again."
+      `This is an older PowerPoint 97-2003 (.${extension}) file. Open it in PowerPoint and save it as .pptx, then upload it again.`
     );
   }
   return new Error(
-    `This ${extension.toUpperCase()} file looks password-protected or saved in an old format. Remove the password (or open it and save it as .${extension}), then upload it again.`
+    `This ${extension.toUpperCase()} file looks password-protected or saved in an old format. Remove the password (or open it and save it as a modern file), then upload it again.`
   );
 }
 
@@ -150,12 +163,81 @@ async function renderPptxPages(
   );
 }
 
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const commaIndex = dataUrl.indexOf(",");
+  const base64 = commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 async function canvasToJpegBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
-  const blob = await new Promise<Blob | null>((resolve) =>
+  // 1. Try standard toBlob with target quality
+  let blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, "image/jpeg", PDF_JPEG_QUALITY)
   );
-  if (!blob) throw new Error("Your browser could not render this page.");
-  return new Uint8Array(await blob.arrayBuffer());
+  if (blob) {
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  // 2. Retry toBlob with slightly reduced quality if memory pressure was high
+  blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", 0.8)
+  );
+  if (blob) {
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  // 3. Fallback to toDataURL (WebKit iOS quirk where toBlob fails but toDataURL succeeds)
+  try {
+    const dataUrl = canvas.toDataURL("image/jpeg", PDF_JPEG_QUALITY);
+    if (dataUrl && dataUrl.length > 50 && !dataUrl.startsWith("data:,")) {
+      return dataUrlToBytes(dataUrl);
+    }
+  } catch {
+    // Continue to downscale fallback
+  }
+
+  // 4. Downscale fallback for iOS Safari devices with strict canvas area limits
+  const maxDim = Math.max(canvas.width, canvas.height);
+  if (maxDim > 1200) {
+    const downscaleFactor = 1600 / maxDim;
+    const safeCanvas = document.createElement("canvas");
+    safeCanvas.width = Math.max(1, Math.round(canvas.width * downscaleFactor));
+    safeCanvas.height = Math.max(1, Math.round(canvas.height * downscaleFactor));
+    const safeCtx = safeCanvas.getContext("2d");
+    if (safeCtx) {
+      safeCtx.fillStyle = "#ffffff";
+      safeCtx.fillRect(0, 0, safeCanvas.width, safeCanvas.height);
+      safeCtx.drawImage(canvas, 0, 0, safeCanvas.width, safeCanvas.height);
+
+      const safeBlob = await new Promise<Blob | null>((resolve) =>
+        safeCanvas.toBlob(resolve, "image/jpeg", 0.85)
+      );
+      if (safeBlob) {
+        safeCanvas.width = 0;
+        safeCanvas.height = 0;
+        return new Uint8Array(await safeBlob.arrayBuffer());
+      }
+
+      try {
+        const safeDataUrl = safeCanvas.toDataURL("image/jpeg", 0.85);
+        safeCanvas.width = 0;
+        safeCanvas.height = 0;
+        if (safeDataUrl && safeDataUrl.length > 50 && !safeDataUrl.startsWith("data:,")) {
+          return dataUrlToBytes(safeDataUrl);
+        }
+      } catch {
+        safeCanvas.width = 0;
+        safeCanvas.height = 0;
+      }
+    }
+  }
+
+  throw new Error("Your browser could not render this page.");
 }
 
 export async function convertOfficeToPdf(
@@ -176,17 +258,17 @@ export async function convertOfficeToPdf(
   const container = document.createElement("div");
   container.setAttribute("aria-hidden", "true");
   container.style.cssText =
-    "position:fixed;top:0;left:-100000px;pointer-events:none;z-index:-1;";
+    "position:fixed;top:0;left:0;width:100%;height:100%;opacity:0;pointer-events:none;z-index:-9999;overflow:hidden;";
   document.body.appendChild(container);
 
   try {
     onProgress?.("Reading document structure…");
     const arrayBuffer = await file.arrayBuffer();
 
-    const pageElements =
-      extension === "doc" || extension === "docx"
-        ? await renderDocxPages(arrayBuffer, container)
-        : await renderPptxPages(arrayBuffer, container);
+    const isWord = (WORD_EXTENSIONS as readonly string[]).includes(extension);
+    const pageElements = isWord
+      ? await renderDocxPages(arrayBuffer, container)
+      : await renderPptxPages(arrayBuffer, container);
 
     if (pageElements.length === 0) throw unsupportedFileError();
     if (pageElements.length > MAX_PAGES) {
@@ -214,16 +296,22 @@ export async function convertOfficeToPdf(
       const cssWidth = Math.max(1, rect.width);
       const cssHeight = Math.max(1, rect.height);
 
+      const scale = Math.min(
+        CAPTURE_SCALE,
+        MAX_CAPTURE_DIMENSION / Math.max(cssWidth, cssHeight)
+      );
+
       const canvas = await domToCanvas(element, {
-        scale: CAPTURE_SCALE,
+        scale,
+        maximumCanvasSize: MAX_CAPTURE_DIMENSION,
         backgroundColor: "#ffffff",
       });
 
       const previewCanvas = document.createElement("canvas");
-      previewCanvas.width = Math.min(PREVIEW_WIDTH, canvas.width);
+      previewCanvas.width = Math.max(1, Math.min(PREVIEW_WIDTH, canvas.width));
       previewCanvas.height = Math.max(
         1,
-        Math.round((canvas.height / canvas.width) * previewCanvas.width)
+        Math.round((canvas.height / Math.max(1, canvas.width)) * previewCanvas.width)
       );
       const previewContext = previewCanvas.getContext("2d", {
         willReadFrequently: true,
@@ -266,6 +354,9 @@ export async function convertOfficeToPdf(
       previewCanvas.height = 0;
       canvas.width = 0;
       canvas.height = 0;
+
+      // Yield briefly to the browser event loop so WebKit/mobile GC can reclaim graphics memory
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
     onProgress?.("Building print-ready PDF…");

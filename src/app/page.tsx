@@ -494,7 +494,7 @@ export default function Home() {
               className="visually-hidden"
               type="file"
               multiple
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.webp"
+              accept=".pdf,.doc,.docx,.docm,.dot,.dotx,.dotm,.ppt,.pptx,.pptm,.pot,.potx,.potm,.pps,.ppsx,.ppsm,.jpg,.jpeg,.png,.webp"
               onChange={(event) => {
                 const selectedFiles = Array.from(event.currentTarget.files ?? []);
                 event.currentTarget.value = "";
@@ -714,7 +714,7 @@ export default function Home() {
                                   type="button"
                                   onClick={() => updateFile(file.id, { bound: true })}
                                 >
-                                  Binding (+₦500 each)
+                                  Binding
                                 </button>
                               </div>
                             </div>

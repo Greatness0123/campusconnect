@@ -77,6 +77,30 @@ async function runTests(): Promise<{
     check("docx: converts without error", false, String(error));
   }
 
+  // --- .docm conversion ---
+  try {
+    const t0 = performance.now();
+    const converted = await convertOfficeToPdf(await loadFixture("fixture.docm"));
+    durations["fixture.docm"] = Math.round(performance.now() - t0);
+
+    check("docm: converts successfully", converted.pages >= 1, `pages=${converted.pages}`);
+    check(
+      "docm: output named fixture.pdf",
+      converted.pdfFile.name === "fixture.pdf" && converted.pdfFile.type === "application/pdf",
+      `${converted.pdfFile.name} (${converted.pdfFile.type})`
+    );
+
+    const bytes = new Uint8Array(await converted.pdfFile.arrayBuffer());
+    const magic = String.fromCharCode(...bytes.slice(0, 4));
+    check("docm: PDF magic %PDF", magic === "%PDF", `magic=${magic}`);
+
+    const back = await PDFDocument.load(bytes);
+    check("docm: PDF reloads with valid page count", back.getPageCount() === converted.pages, `pages=${back.getPageCount()}`);
+    check("docm: has preview URLs", converted.previewUrls.length === converted.pages, `previews=${converted.previewUrls.length}`);
+  } catch (error) {
+    check("docm: converts without error", false, String(error));
+  }
+
   // --- .pptx conversion ---
   try {
     const t0 = performance.now();

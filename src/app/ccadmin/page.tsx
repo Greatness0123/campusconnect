@@ -712,7 +712,7 @@ export default function AdminPage() {
                         )}
 
                         {/* Payment Not Received signal toggle */}
-                        {order.status !== "Completed" && (() => {
+                        {/* {order.status !== "Completed" && (() => {
                           const isPending = pendingId === order.id;
                           return order.status === "Payment Not Received" ? (
                             <button
@@ -739,7 +739,7 @@ export default function AdminPage() {
                               {isPending ? "Sending…" : "Payment Not Received"}
                             </button>
                           );
-                        })()}
+                        })()} */}
                       </div>
                     </td>
                   </tr>
