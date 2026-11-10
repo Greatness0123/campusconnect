@@ -1,11 +1,11 @@
 "use client";
 
-import { Check, Download, FileDown, LoaderCircle, X } from "lucide-react";
+import { Download, FileDown, LoaderCircle, X } from "lucide-react";
 import Image from "next/image";
 import { useRef, useState } from "react";
 import { domToPng } from "modern-screenshot";
 import { PDFDocument } from "pdf-lib";
-import { formatNaira, getHostelAccount, type LocationArea, type Quote } from "@/lib/print";
+import { formatNaira, type LocationArea, type Quote } from "@/lib/print";
 
 export type QuotationModalProps = {
   isOpen: boolean;
@@ -47,11 +47,9 @@ export function QuotationModal({
   const receiptRef = useRef<HTMLDivElement>(null);
   const [downloadingImage, setDownloadingImage] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [copiedAccount, setCopiedAccount] = useState(false);
 
   if (!isOpen) return null;
 
-  const account = getHostelAccount(area, location);
   const displayDate = date
     ? new Date(date).toLocaleString("en-NG", {
         dateStyle: "medium",
@@ -61,13 +59,6 @@ export function QuotationModal({
         dateStyle: "medium",
         timeStyle: "short",
       });
-
-  function copyAccountNumber() {
-    void navigator.clipboard?.writeText(account.accountNumber).then(() => {
-      setCopiedAccount(true);
-      window.setTimeout(() => setCopiedAccount(false), 1600);
-    });
-  }
 
   async function generatePngDataUrl(): Promise<string | null> {
     if (!receiptRef.current) return null;
@@ -169,13 +160,15 @@ export function QuotationModal({
           <div className="quotation-receipt-box" ref={receiptRef}>
             {/* Logo Backdrop Watermark */}
             <div className="quotation-watermark" aria-hidden="true">
-              <Image
-                src="/icononly.png"
-                alt=""
-                width={260}
-                height={260}
-                priority
-              />
+              <div className="quotation-watermark-circle">
+                <Image
+                  src="/icononly.png"
+                  alt=""
+                  width={260}
+                  height={260}
+                  priority
+                />
+              </div>
             </div>
 
             {/* Receipt Content */}
@@ -183,16 +176,19 @@ export function QuotationModal({
               {/* Header */}
               <div className="quotation-receipt-head">
                 <div className="quotation-brand">
-                  <Image
-                    src="/icononly.png"
-                    alt="Campus Prints"
-                    width={38}
-                    height={38}
-                    priority
-                  />
+                  <div className="quotation-logo-circle">
+                    <Image
+                      className="brand-logo"
+                      src="/icononly.png"
+                      alt="Campus Prints"
+                      width={36}
+                      height={36}
+                      priority
+                    />
+                  </div>
                   <div>
                     <strong className="quotation-brand-name">Campus Prints</strong>
-                    <span className="quotation-brand-tag">Student Print Services</span>
+                    <span className="quotation-brand-tag">Smart students print with us</span>
                   </div>
                 </div>
                 <div className="quotation-receipt-tag">Quotation Receipt</div>
@@ -202,7 +198,7 @@ export function QuotationModal({
               <div className="quotation-amount-section">
                 <span className="quotation-amount-label">Total Amount</span>
                 <h1 className="quotation-amount-val">{formatNaira(total)}</h1>
-                <span className="quotation-status-pill">Payment on Order / Transfer</span>
+                <span className="quotation-date-tag">{displayDate}</span>
               </div>
 
               <div className="quotation-divider" />
@@ -212,10 +208,6 @@ export function QuotationModal({
                 <div className="quotation-meta-item">
                   <span className="q-label">Reference ID</span>
                   <strong className="q-val">{orderId}</strong>
-                </div>
-                <div className="quotation-meta-item">
-                  <span className="q-label">Date &amp; Time</span>
-                  <strong className="q-val">{displayDate}</strong>
                 </div>
                 <div className="quotation-meta-item">
                   <span className="q-label">Customer Name</span>
@@ -310,35 +302,6 @@ export function QuotationModal({
               )}
 
               <div className="quotation-divider" />
-
-              {/* Payment Account Details for this Hostel */}
-              <div className="quotation-bank-box">
-                <div className="quotation-bank-badge">
-                  <span>TRANSFER DETAILS ({account.badge})</span>
-                  <button
-                    type="button"
-                    className="quotation-copy-btn"
-                    onClick={copyAccountNumber}
-                  >
-                    {copiedAccount ? <Check size={12} /> : null}
-                    {copiedAccount ? "Copied" : "Copy"}
-                  </button>
-                </div>
-                <div className="quotation-bank-details">
-                  <div className="q-bank-row">
-                    <span>Bank:</span>
-                    <strong>{account.bank}</strong>
-                  </div>
-                  <div className="q-bank-row">
-                    <span>Account Name:</span>
-                    <strong>{account.accountName}</strong>
-                  </div>
-                  <div className="q-bank-row">
-                    <span>Account Number:</span>
-                    <strong className="q-account-num">{account.accountNumber}</strong>
-                  </div>
-                </div>
-              </div>
 
               {/* Footer */}
               <div className="quotation-footer">
