@@ -1,5 +1,7 @@
 export const DEMO_ORDERS_KEY = "campusprints:demo-orders";
 
+import type { Fulfilment } from "./print";
+
 export type DemoOrderStatus =
   | "New"
   | "Printing"
@@ -29,7 +31,7 @@ export type DemoOrder = {
   status: DemoOrderStatus;
   paymentNotReceived?: boolean;
   paymentReceiptPath?: string;
-  fulfilment?: "collection" | "delivery";
+  fulfilment?: Fulfilment | "delivery";
   documents: DemoOrderDocument[];
   total: number;
   area: string;

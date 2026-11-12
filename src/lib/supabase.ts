@@ -23,6 +23,8 @@ export type OrderRecord = {
   stapling: string;
   binding: string;
   copies: number;
+  delivery_option?: string | null;
+  delivery_fee?: number;
   created_at: string;
   payment_receipt_path?: string;
 };

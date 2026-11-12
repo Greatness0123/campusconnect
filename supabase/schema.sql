@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS public.orders (
     stapling TEXT NOT NULL,
     binding TEXT NOT NULL,
     copies INTEGER NOT NULL DEFAULT 1,
+    delivery_option TEXT, -- 'standard' | 'express' (NULL = collected at the desk)
+    delivery_fee NUMERIC NOT NULL DEFAULT 0, -- ₦200 for express, 0 otherwise
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

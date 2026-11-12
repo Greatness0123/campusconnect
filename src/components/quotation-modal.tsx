@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 import { domToPng } from "modern-screenshot";
 import { PDFDocument } from "pdf-lib";
-import { formatNaira, type LocationArea, type Quote } from "@/lib/print";
+import { deliveryTiers, formatNaira, type Fulfilment, type LocationArea, type Quote } from "@/lib/print";
 
 export type QuotationModalProps = {
   isOpen: boolean;
@@ -15,7 +15,7 @@ export type QuotationModalProps = {
   phone?: string;
   area: LocationArea;
   location: string;
-  fulfilment?: "collection" | "delivery";
+  fulfilment?: Fulfilment | "delivery";
   date?: string;
   quote?: Quote | null;
   documents?: { name: string; pages: number; copies: number }[];
@@ -220,7 +220,9 @@ export function QuotationModal({
                   </div>
                 )}
                 <div className="quotation-meta-item">
-                  <span className="q-label">{fulfilment === "delivery" ? "Delivery Spot" : "Pickup Spot"}</span>
+                  <span className="q-label">
+                    {fulfilment === "collection" ? "Pickup Spot" : "Delivery Spot"}
+                  </span>
                   <strong className="q-val">
                     {area} · {location}
                   </strong>
@@ -288,6 +290,12 @@ export function QuotationModal({
                     <span>Printing cost</span>
                     <strong>{formatNaira(quote.printCost)}</strong>
                   </div>
+                  {quote.night && (
+                    <div className="quotation-stat-row">
+                      <span>Night rates (10pm–6am)</span>
+                      <strong>Applied</strong>
+                    </div>
+                  )}
                   {quote.finishingCost > 0 && (
                     <div className="quotation-stat-row">
                       <span>Finishing &amp; binding</span>
@@ -295,8 +303,18 @@ export function QuotationModal({
                     </div>
                   )}
                   <div className="quotation-stat-row">
-                    <span>{fulfilment === "delivery" ? "Delivery" : "Collection"}</span>
-                    <strong style={{ color: "var(--success)" }}>FREE</strong>
+                    <span>
+                      {fulfilment === "collection"
+                        ? "Collection"
+                        : fulfilment === "express"
+                        ? "Express delivery"
+                        : "Standard delivery"}
+                    </span>
+                    <strong style={{ color: "var(--success)" }}>
+                      {fulfilment === "express"
+                        ? formatNaira(deliveryTiers.express.fee)
+                        : "FREE"}
+                    </strong>
                   </div>
                 </div>
               )}

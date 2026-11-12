@@ -19,7 +19,7 @@ import { QuotationModal } from "@/components/quotation-modal";
 import { ReceiptUploadModal } from "@/components/receipt-upload-modal";
 import { readDemoOrders, type DemoOrder, type DemoOrderDocument } from "@/lib/demo-orders";
 import { getPlacedOrderDraft } from "@/lib/order-draft";
-import { formatNaira, type LocationArea } from "@/lib/print";
+import { deliveryEta, deliveryTiers, formatNaira, type DeliveryTier, type LocationArea } from "@/lib/print";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 const STEPS = [
@@ -162,6 +162,10 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
               createdAt: data.created_at,
               status: data.status as DemoOrder["status"],
               paymentNotReceived: isUnpaid,
+              fulfilment:
+                data.delivery_option === "standard" || data.delivery_option === "express"
+                  ? data.delivery_option
+                  : "collection",
               documents: rawDocs,
               total: data.total_amount,
               area: data.pickup_area,
@@ -290,6 +294,9 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
   const isPaymentNotReceived =
     order.status === "Payment Not Received" || Boolean(order.paymentNotReceived);
 
+  const isDeliveryOrder = Boolean(order.fulfilment && order.fulfilment !== "collection");
+  const deliveryTier: DeliveryTier = order.fulfilment === "express" ? "express" : "standard";
+
   const stepIndex =
     order.status === "New"
       ? 0
@@ -375,6 +382,18 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
               const isCompleted = order.status === "Completed";
               const isDone = isCompleted ? true : index < stepIndex;
               const isCurrent = !isCompleted && index === stepIndex && !isPaymentNotReceived;
+              const label =
+                isDeliveryOrder && step.key === "Ready"
+                  ? "Ready for delivery"
+                  : isDeliveryOrder && step.key === "Completed"
+                  ? "Delivered"
+                  : step.label;
+              const desc =
+                isDeliveryOrder && step.key === "Ready"
+                  ? `On the way · ${deliveryEta(deliveryTier)}`
+                  : isDeliveryOrder && step.key === "Completed"
+                  ? "Handed to your delivery spot"
+                  : step.desc;
               return (
                 <div
                   key={step.key}
@@ -382,8 +401,8 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
                 >
                   <div className="status-dot">{isDone || isCurrent ? <Check size={14} /> : index + 1}</div>
                   <div className="status-meta">
-                    <strong>{step.label}</strong>
-                    <span>{step.desc}</span>
+                    <strong>{label}</strong>
+                    <span>{desc}</span>
                   </div>
                 </div>
               );
@@ -404,11 +423,22 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
             </strong>
           </div>
           <div className="order-summary-row">
-            <span>Pickup</span>
+            <span>{isDeliveryOrder ? "Delivery" : "Pickup"}</span>
             <strong>
               {order.area} · {order.location}
             </strong>
           </div>
+          {isDeliveryOrder && (
+            <div className="order-summary-row">
+              <span>{deliveryTiers[deliveryTier].label} delivery</span>
+              <strong>
+                {deliveryEta(deliveryTier)} ·{" "}
+                {deliveryTiers[deliveryTier].fee === 0
+                  ? "FREE"
+                  : formatNaira(deliveryTiers[deliveryTier].fee)}
+              </strong>
+            </div>
+          )}
           <div className="order-summary-row">
             <span>Specs</span>
             <strong>

@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   LoaderCircle,
   Minus,
+  Moon,
   Plus,
   UploadCloud,
   X,
@@ -16,11 +17,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { estimateColorCoverage } from "@/lib/analysis";
+import { useClock } from "@/lib/clock";
 import { convertOfficeToPdf, isOfficeFilename } from "@/lib/office-to-pdf";
 import { syncDeviceSession } from "@/lib/supabase";
 import {
   computeQuote,
   formatNaira,
+  isNightRate,
   locationOptions,
   parsePageSelection,
   pricing,
@@ -277,7 +280,9 @@ export default function Home() {
 
   const allReady = files.length > 0 && files.every((file) => file.status === "ready");
 
-  const quote = useMemo(() => computeQuote(files), [files]);
+  const now = useClock();
+  const nightRate = isNightRate(now);
+  const quote = useMemo(() => computeQuote(files, nightRate), [files, nightRate]);
 
   async function addFiles(fileList: FileList | File[]) {
     const incoming = Array.from(fileList).slice(0, Math.max(0, 10 - files.length));
@@ -840,6 +845,15 @@ export default function Home() {
                 {files.length} {files.length === 1 ? "document" : "documents"} · {quote.copyPages} pages
               </p>
 
+              {nightRate && (
+                <div className="night-rate-notice">
+                  <Moon size={13} />
+                  <span>
+                    Night rates until 6am · B&amp;W {formatNaira(pricing.monoNight)}/page
+                  </span>
+                </div>
+              )}
+
               <div className="quote-breakdown-list">
                 {quote.blackAndWhitePages > 0 && (
                   <div className="quote-line-item">
@@ -899,13 +913,19 @@ export default function Home() {
               {/* Payment paused banner removed by request */}
             </div>
 
-            <div className="rate-note">
+            <div className={`rate-note ${nightRate ? "night" : ""}`}>
               <p className="welcome-eyebrow">
                 CAMPUS RATE CARD
               </p>
+              {nightRate && (
+                <div className="night-rate-notice">
+                  <Moon size={13} />
+                  <span>Night pricing in effect until 6am</span>
+                </div>
+              )}
               <div className="rate-note-row">
                 <span>Single · B&amp;W</span>
-                <strong>{formatNaira(pricing.mono)}</strong>
+                <strong>{formatNaira(nightRate ? pricing.monoNight : pricing.mono)}</strong>
               </div>
               <div className="rate-note-row">
                 <span>Single · Color</span>
@@ -913,7 +933,7 @@ export default function Home() {
               </div>
               <div className="rate-note-row">
                 <span>Duplex · B&amp;W</span>
-                <strong>{formatNaira(pricing.duplexMono)}</strong>
+                <strong>{formatNaira(nightRate ? pricing.duplexMonoNight : pricing.duplexMono)}</strong>
               </div>
               <div className="rate-note-row">
                 <span>Duplex · Color</span>

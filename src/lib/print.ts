@@ -75,12 +75,50 @@ export function getHostelAccount(area: LocationArea, _location?: string): Hostel
 
 export const pricing = {
   mono: 100,
+  monoNight: 150,
   colorLight: 150,
   colorHeavy: 200,
   duplexMono: 70,
+  duplexMonoNight: 100,
   duplexColor: 150,
   binding: 500,
 };
+
+// Night curfew window: orders placed between 10pm and 6am use the night B&W rates.
+export const NIGHT_RATE_START_HOUR = 22;
+export const NIGHT_RATE_END_HOUR = 6;
+
+export function isNightRate(date: Date = new Date()): boolean {
+  const hour = date.getHours();
+  return hour >= NIGHT_RATE_START_HOUR || hour < NIGHT_RATE_END_HOUR;
+}
+
+/** B&W per-page rate for the given sides, at day or night pricing. */
+export function monoPageRate(sides: Sides, night: boolean): number {
+  if (sides === "duplex") return night ? pricing.duplexMonoNight : pricing.duplexMono;
+  return night ? pricing.monoNight : pricing.mono;
+}
+
+export type DeliveryTier = "standard" | "express";
+export type Fulfilment = "collection" | DeliveryTier;
+
+export const deliveryTiers: Record<
+  DeliveryTier,
+  { label: string; fee: number; minMinutes: number; maxMinutes: number }
+> = {
+  standard: { label: "Standard", fee: 0, minMinutes: 30, maxMinutes: 60 },
+  express: { label: "Express", fee: 200, minMinutes: 15, maxMinutes: 30 },
+};
+
+export function deliveryFee(fulfilment: Fulfilment): number {
+  return fulfilment === "collection" ? 0 : deliveryTiers[fulfilment].fee;
+}
+
+export function deliveryEta(fulfilment: Fulfilment): string {
+  if (fulfilment === "collection") return "Ready when notified";
+  const tier = deliveryTiers[fulfilment];
+  return `${tier.minMinutes}–${tier.maxMinutes} min`;
+}
 
 export function parsePageSelection(input: string, pageCount: number) {
   const value = input.trim().toLowerCase();
@@ -153,10 +191,12 @@ export type Quote = {
   anyStapled: boolean;
   anyBound: boolean;
   anyDuplex: boolean;
+  /** True when the quote was priced inside the 10pm–6am night window. */
+  night: boolean;
   perFile: FileQuote[];
 };
 
-export function computeQuote(files: QuoteFileInput[]): Quote {
+export function computeQuote(files: QuoteFileInput[], night: boolean = isNightRate()): Quote {
   let blackAndWhitePages = 0;
   let lightColorPages = 0;
   let heavyColorPages = 0;
@@ -172,7 +212,7 @@ export function computeQuote(files: QuoteFileInput[]): Quote {
   for (const file of files) {
     if (file.status !== "ready") continue;
 
-    const monoRate = file.sides === "duplex" ? pricing.duplexMono : pricing.mono;
+    const monoRate = monoPageRate(file.sides, night);
     const lightRate = file.sides === "duplex" ? pricing.duplexColor : pricing.colorLight;
     const heavyRate = file.sides === "duplex" ? pricing.duplexColor : pricing.colorHeavy;
 
@@ -241,6 +281,7 @@ export function computeQuote(files: QuoteFileInput[]): Quote {
     anyStapled,
     anyBound,
     anyDuplex,
+    night,
     perFile,
   };
 }

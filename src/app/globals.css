@@ -1032,6 +1032,28 @@ a { color: inherit; text-decoration: none; }
   color: var(--success) !important;
 }
 
+/* Night pricing notice (10pm–6am) */
+.night-rate-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+  background: rgba(245, 184, 76, 0.12);
+  border: 1px solid rgba(245, 184, 76, 0.4);
+}
+.night-rate-notice svg {
+  color: #f0b450;
+  flex-shrink: 0;
+}
+.rate-note.night {
+  border-color: rgba(245, 184, 76, 0.5);
+}
+
 /* Floating bottom bar removed by request */
 
 /* Admin Dashboard Styling */
@@ -1661,6 +1683,69 @@ a { color: inherit; text-decoration: none; }
   background: var(--surface);
   border: 1px solid var(--line);
   margin-bottom: 2px;
+}
+
+/* Delivery card: header + two stacked options (Standard / Express) */
+.fulfilment-card.delivery-group {
+  cursor: default;
+  justify-items: stretch;
+  text-align: left;
+  gap: 10px;
+}
+.fulfilment-card.delivery-group .fulfilment-icon {
+  justify-self: center;
+}
+.fulfilment-card.delivery-group .dual-card-title {
+  text-align: center;
+}
+.delivery-options {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.delivery-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.delivery-option:hover {
+  border-color: var(--line-strong);
+}
+.delivery-option.selected {
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
+  background: var(--surface-raised);
+}
+.delivery-option-name {
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.delivery-option-name small {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.delivery-option-price {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.delivery-option-price.free {
+  color: var(--success);
 }
 .checkout-field { display: grid; gap: 8px; }
 .checkout-field label { font-size: 13px; font-weight: 700; }

@@ -291,6 +291,10 @@ export default function AdminPage() {
               total: o.total_amount,
               area: o.pickup_area,
               location: o.pickup_location,
+              fulfilment:
+                o.delivery_option === "standard" || o.delivery_option === "express"
+                  ? o.delivery_option
+                  : "collection",
               printMode: o.print_mode,
               sides: o.sides,
               stapling: o.stapling,
@@ -682,6 +686,9 @@ export default function AdminPage() {
                       <strong>{order.customer}</strong>
                       <small style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>
                         {order.area} · {order.location}
+                        {order.fulfilment && order.fulfilment !== "collection"
+                          ? ` · ${order.fulfilment === "express" ? "Express" : "Standard"} delivery`
+                          : ""}
                       </small>
                     </td>
                     <td colSpan={2}>

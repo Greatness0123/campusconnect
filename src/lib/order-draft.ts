@@ -1,4 +1,4 @@
-import type { ColorMode, LocationArea, Sides } from "./print";
+import type { ColorMode, Fulfilment, LocationArea, Sides } from "./print";
 
 export type DraftFile = {
   id: string;
@@ -24,6 +24,7 @@ export type OrderDraft = {
   files: DraftFile[];
   area: LocationArea;
   location: string;
+  fulfilment?: Fulfilment;
 };
 
 const STORAGE_KEY = "campusprints:order-draft";

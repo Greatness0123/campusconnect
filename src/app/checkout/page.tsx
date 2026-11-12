@@ -27,11 +27,17 @@ import {
 } from "@/lib/order-draft";
 import {
   computeQuote,
+  deliveryEta,
+  deliveryTiers,
   formatNaira,
   getHostelAccount,
+  isNightRate,
   locationOptions,
+  pricing,
+  type Fulfilment,
   type LocationArea,
 } from "@/lib/print";
+import { useClock } from "@/lib/clock";
 import { isSupabaseConfigured, supabase, uploadOrderFile } from "@/lib/supabase";
 
 const LOCAL_ORDER_COUNTER_KEY = "campusprints:order-counter";
@@ -58,7 +64,7 @@ export default function CheckoutPage() {
   const [phone, setPhone] = useState("");
   const [area, setArea] = useState<LocationArea>("Uptown");
   const [location, setLocation] = useState(locationOptions.Uptown[0]);
-  const [fulfilment, setFulfilment] = useState<"collection" | "delivery">("collection");
+  const [fulfilment, setFulfilment] = useState<Fulfilment>("collection");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showQuotation, setShowQuotation] = useState(false);
@@ -100,6 +106,9 @@ export default function CheckoutPage() {
     setDraft(existing);
     setArea(existing.area);
     setLocation(existing.location);
+    if (existing.fulfilment) {
+      setFulfilment(existing.fulfilment);
+    }
     if (existing.phone) {
       setPhone(existing.phone);
     } else {
@@ -108,10 +117,15 @@ export default function CheckoutPage() {
     }
   }, [router]);
 
+  const now = useClock();
+  const nightRate = isNightRate(now);
   const quote = useMemo(
-    () => (draft ? computeQuote(draft.files) : null),
-    [draft]
+    () => (draft ? computeQuote(draft.files, nightRate) : null),
+    [draft, nightRate]
   );
+
+  const deliveryCharge = fulfilment === "collection" ? 0 : deliveryTiers[fulfilment].fee;
+  const grandTotal = (quote?.total ?? 0) + deliveryCharge;
 
   const areaOptions = Object.keys(locationOptions) as LocationArea[];
   const activeAccount = getHostelAccount(area, location);
@@ -160,6 +174,7 @@ export default function CheckoutPage() {
         phone: phone.trim(),
         area,
         location,
+        fulfilment,
         orderId: existingOrderId,
       });
 
@@ -218,7 +233,7 @@ export default function CheckoutPage() {
         binding: file.bound ? "Binding added" : "No binding",
         pageSelection: file.pageSelection || "all",
       })),
-      total: quote.total,
+      total: grandTotal,
       area,
       location,
       printMode,
@@ -259,7 +274,7 @@ export default function CheckoutPage() {
           customer_name: phone.trim() ? `${draft.customer} (${phone.trim()})` : draft.customer,
           device_id: draft.deviceId,
           status: "New",
-          total_amount: quote.total,
+          total_amount: grandTotal,
           pickup_area: area,
           pickup_location: location,
           print_mode: printMode,
@@ -267,6 +282,8 @@ export default function CheckoutPage() {
           stapling: orderItem.stapling,
           binding: orderItem.binding,
           copies: draft.files[0]?.copies ?? 1,
+          delivery_option: fulfilment === "collection" ? null : fulfilment,
+          delivery_fee: deliveryCharge,
         });
         if (orderError) throw orderError;
 
@@ -287,6 +304,7 @@ export default function CheckoutPage() {
       phone: phone.trim(),
       area,
       location,
+      fulfilment,
       orderId,
     });
 
@@ -398,6 +416,15 @@ export default function CheckoutPage() {
               <strong>{quote.heavyColorPages}</strong>
             </div>
             <div className="receipt-divider" />
+            {nightRate && (
+              <div className="receipt-row">
+                <span>Night rates (10pm–6am)</span>
+                <strong>
+                  B&amp;W {formatNaira(pricing.monoNight)}/pg · duplex{" "}
+                  {formatNaira(pricing.duplexMonoNight)}/pg
+                </strong>
+              </div>
+            )}
             <div className="receipt-row">
               <span>Printing</span>
               <strong>{formatNaira(quote.printCost)}</strong>
@@ -411,12 +438,16 @@ export default function CheckoutPage() {
               <strong>{quote.anyBound ? formatNaira(quote.finishingCost) : "No"}</strong>
             </div>
             <div className="receipt-row">
-              <span>{fulfilment === "collection" ? "Pickup" : "Delivery"}</span>
-              <strong>FREE</strong>
+              <span>
+                {fulfilment === "collection"
+                  ? "Pickup"
+                  : `Delivery · ${deliveryTiers[fulfilment].label}`}
+              </span>
+              <strong>{deliveryCharge === 0 ? "FREE" : formatNaira(deliveryCharge)}</strong>
             </div>
             <div className="receipt-total">
               <span>Total</span>
-              <strong>{formatNaira(quote.total)}</strong>
+              <strong>{formatNaira(grandTotal)}</strong>
             </div>
           </div>
         </div>
@@ -433,24 +464,67 @@ export default function CheckoutPage() {
                 <Store size={18} />
               </div>
               <h4 className="dual-card-title">Collection</h4>
-              <p className="dual-card-desc">FREE</p>
+              <p className="dual-card-desc">FREE · pick up at the desk</p>
             </div>
+
             <div
-              className={`dual-card fulfilment-card ${fulfilment === "delivery" ? "selected" : ""}`}
-              onClick={() => setFulfilment("delivery")}
+              className={`dual-card fulfilment-card delivery-group ${
+                fulfilment !== "collection" ? "selected" : ""
+              }`}
             >
               <div className="fulfilment-icon">
                 <Truck size={18} />
               </div>
               <h4 className="dual-card-title">Delivery</h4>
-              <p className="dual-card-desc">FREE</p>
+              <div className="delivery-options">
+                <button
+                  type="button"
+                  className={`delivery-option ${fulfilment === "standard" ? "selected" : ""}`}
+                  onClick={() => setFulfilment("standard")}
+                >
+                  <span className="delivery-option-name">
+                    Standard
+                    <small>{deliveryEta("standard")}</small>
+                  </span>
+                  <strong
+                    className={`delivery-option-price ${
+                      deliveryTiers.standard.fee === 0 ? "free" : ""
+                    }`}
+                  >
+                    {deliveryTiers.standard.fee === 0
+                      ? "FREE"
+                      : formatNaira(deliveryTiers.standard.fee)}
+                  </strong>
+                </button>
+                <button
+                  type="button"
+                  className={`delivery-option ${fulfilment === "express" ? "selected" : ""}`}
+                  onClick={() => setFulfilment("express")}
+                >
+                  <span className="delivery-option-name">
+                    Express
+                    <small>{deliveryEta("express")}</small>
+                  </span>
+                  <strong
+                    className={`delivery-option-price ${
+                      deliveryTiers.express.fee === 0 ? "free" : ""
+                    }`}
+                  >
+                    {deliveryTiers.express.fee === 0
+                      ? "FREE"
+                      : formatNaira(deliveryTiers.express.fee)}
+                  </strong>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Pickup location */}
         <div className="checkout-section">
-          <h3 className="setting-title">Pickup details</h3>
+          <h3 className="setting-title">
+            {fulfilment === "collection" ? "Pickup details" : "Delivery details"}
+          </h3>
           <div className="checkout-field">
             <label htmlFor="co-area">Campus area</label>
             <CustomSelect
@@ -569,11 +643,11 @@ export default function CheckoutPage() {
                 </>
               ) : isReadyForPayment ? (
                 <>
-                  <Check size={17} /> I have paid · {formatNaira(quote.total)} <ArrowRight size={17} />
+                  <Check size={17} /> I have paid · {formatNaira(grandTotal)} <ArrowRight size={17} />
                 </>
               ) : (
                 <>
-                  Ready to print? {formatNaira(quote.total)} <ArrowRight size={17} />
+                  Ready to print? {formatNaira(grandTotal)} <ArrowRight size={17} />
                 </>
               )}
             </button>
@@ -597,7 +671,7 @@ export default function CheckoutPage() {
           location={location}
           fulfilment={fulfilment}
           quote={quote}
-          total={quote.total}
+          total={grandTotal}
           sides={quote.anyDuplex ? "Front & back" : "Single-sided"}
           stapling={quote.anyStapled ? "Stapled" : undefined}
           binding={quote.anyBound ? "Spiral bound" : undefined}
