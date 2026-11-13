@@ -303,7 +303,7 @@ export default function Home() {
       previewPage: 1,
       pageSelection: "all",
       copies: 1,
-      colorMode: "keep",
+      colorMode: "mono",
       sides: "single",
       stapled: false,
       bound: false,
@@ -318,12 +318,10 @@ export default function Home() {
             current.map((file) => (file.id === item.id ? { ...file, message } : file))
           )
         );
-        const hasColor = (result.colorCoverage ?? []).some((c) => c > 0.005);
-        const detectedMode: ColorMode = hasColor ? "keep" : "mono";
         setFiles((current) =>
           current.map((file) =>
             file.id === item.id
-              ? { ...file, ...result, message: undefined, colorMode: detectedMode }
+              ? { ...file, ...result, message: undefined, colorMode: "mono" }
               : file
           )
         );
@@ -616,19 +614,6 @@ export default function Home() {
                         <label>How should we print this?</label>
                         <div className="dual-cards-grid">
                           <div
-                            className={`dual-card ${file.colorMode === "keep" ? "selected" : ""}`}
-                            onClick={() =>
-                              setFiles((current) =>
-                                current.map((f) =>
-                                  f.id === file.id ? { ...f, colorMode: "keep" } : f
-                                )
-                              )
-                            }
-                          >
-                            <h4 className="dual-card-title">Print in colour</h4>
-                            <p className="dual-card-desc">Keep the colours in your file</p>
-                          </div>
-                          <div
                             className={`dual-card ${file.colorMode === "mono" ? "selected" : ""}`}
                             onClick={() =>
                               setFiles((current) =>
@@ -640,6 +625,19 @@ export default function Home() {
                           >
                             <h4 className="dual-card-title">Black &amp; white</h4>
                             <p className="dual-card-desc">Everything printed in B&amp;W</p>
+                          </div>
+                          <div
+                            className={`dual-card ${file.colorMode === "keep" ? "selected" : ""}`}
+                            onClick={() =>
+                              setFiles((current) =>
+                                current.map((f) =>
+                                  f.id === file.id ? { ...f, colorMode: "keep" } : f
+                                )
+                              )
+                            }
+                          >
+                            <h4 className="dual-card-title">Print in colour</h4>
+                            <p className="dual-card-desc">Keep the colours in your file</p>
                           </div>
                         </div>
                       </div>
