@@ -104,6 +104,203 @@ function isTimeoutError(error: unknown): boolean {
   return error instanceof Error && error.name === TIMEOUT_ERROR_NAME;
 }
 
+function parseLengthToPx(value: string | null | undefined, defaultPx: number): number {
+  if (!value) return defaultPx;
+  const match = value.trim().match(/^([0-9.]+)\s*(mm|cm|in|pt|px)?$/i);
+  if (!match) return defaultPx;
+  const num = parseFloat(match[1]);
+  if (!Number.isFinite(num) || num <= 0) return defaultPx;
+  const unit = (match[2] ?? "px").toLowerCase();
+  switch (unit) {
+    case "mm":
+      return (num * 96) / 25.4;
+    case "cm":
+      return (num * 96) / 2.54;
+    case "in":
+      return num * 96;
+    case "pt":
+      return (num * 96) / 72;
+    case "px":
+    default:
+      return num;
+  }
+}
+
+function isSectionEmpty(section: HTMLElement): boolean {
+  if (section.querySelector("img, svg, canvas, audio, video")) return false;
+  const tables = section.querySelectorAll("table");
+  for (const table of Array.from(tables)) {
+    if ((table.textContent ?? "").trim().length > 0) return false;
+  }
+  const text = (section.textContent ?? "").trim();
+  return text.length === 0;
+}
+
+function createPageSection(template: HTMLElement, targetHeight: number): {
+  section: HTMLElement;
+  article: HTMLElement;
+} {
+  const pageSec = template.cloneNode(false) as HTMLElement;
+  pageSec.style.height = `${targetHeight}px`;
+  pageSec.style.minHeight = `${targetHeight}px`;
+  pageSec.style.maxHeight = `${targetHeight}px`;
+  pageSec.style.overflow = "hidden";
+  pageSec.style.boxSizing = "border-box";
+  pageSec.style.display = "flex";
+  pageSec.style.flexFlow = "column nowrap";
+  pageSec.style.position = "relative";
+
+  const header = template.querySelector<HTMLElement>(":scope > header");
+  if (header) {
+    pageSec.appendChild(header.cloneNode(true));
+  }
+
+  const templateArticle = template.querySelector<HTMLElement>("article");
+  const pageArticle = templateArticle
+    ? (templateArticle.cloneNode(false) as HTMLElement)
+    : document.createElement("article");
+  pageArticle.style.overflow = "hidden";
+  pageArticle.style.flex = "1 1 auto";
+  pageSec.appendChild(pageArticle);
+
+  const footer = template.querySelector<HTMLElement>(":scope > footer");
+  if (footer) {
+    pageSec.appendChild(footer.cloneNode(true));
+  }
+
+  return { section: pageSec, article: pageArticle };
+}
+
+function paginateOverflowingSection(
+  section: HTMLElement,
+  targetHeight: number,
+  container: HTMLElement
+): HTMLElement[] {
+  const article = section.querySelector<HTMLElement>("article");
+  if (!article || article.children.length === 0) {
+    section.style.height = `${targetHeight}px`;
+    section.style.overflow = "hidden";
+    return [section];
+  }
+
+  const computed = window.getComputedStyle(section);
+  const padTop = parseFloat(computed.paddingTop) || 0;
+  const padBottom = parseFloat(computed.paddingBottom) || 0;
+  const header = section.querySelector<HTMLElement>(":scope > header");
+  const footer = section.querySelector<HTMLElement>(":scope > footer");
+  const headerH = header ? header.getBoundingClientRect().height : 0;
+  const footerH = footer ? footer.getBoundingClientRect().height : 0;
+  const availableHeight = Math.max(
+    150,
+    targetHeight - padTop - padBottom - headerH - footerH
+  );
+
+  const queue: HTMLElement[] = Array.from(article.children) as HTMLElement[];
+  const pages: HTMLElement[] = [];
+
+  let current = createPageSection(section, targetHeight);
+  container.insertBefore(current.section, section);
+  pages.push(current.section);
+  let currentUsedHeight = 0;
+
+  while (queue.length > 0) {
+    const item = queue.shift()!;
+    current.article.appendChild(item);
+
+    const rect = item.getBoundingClientRect();
+    const style = window.getComputedStyle(item);
+    const mt = parseFloat(style.marginTop) || 0;
+    const mb = parseFloat(style.marginBottom) || 0;
+    const itemH = rect.height + mt + mb;
+
+    if (currentUsedHeight + itemH <= availableHeight) {
+      currentUsedHeight += itemH;
+      continue;
+    }
+
+    // Item does not fit on current page
+    if (currentUsedHeight > 0) {
+      current.article.removeChild(item);
+      current = createPageSection(section, targetHeight);
+      container.insertBefore(current.section, section);
+      pages.push(current.section);
+      currentUsedHeight = 0;
+      queue.unshift(item);
+      continue;
+    }
+
+    // We are on a fresh page and the single item is larger than availableHeight
+    if (item.tagName === "TABLE") {
+      const table = item as HTMLTableElement;
+      const rows = Array.from(table.querySelectorAll<HTMLTableRowElement>("tr"));
+      if (rows.length > 1) {
+        current.article.removeChild(item);
+
+        const table1 = table.cloneNode(false) as HTMLTableElement;
+        const tbody1 = document.createElement("tbody");
+        table1.appendChild(tbody1);
+        current.article.appendChild(table1);
+
+        let rowHeightSum = 0;
+        let splitIdx = 0;
+        for (let i = 0; i < rows.length; i++) {
+          const rH = rows[i].getBoundingClientRect().height;
+          if (rowHeightSum + rH > availableHeight && i > 0) {
+            splitIdx = i;
+            break;
+          }
+          tbody1.appendChild(rows[i]);
+          rowHeightSum += rH;
+        }
+
+        if (splitIdx > 0 && splitIdx < rows.length) {
+          const table2 = table.cloneNode(false) as HTMLTableElement;
+          const tbody2 = document.createElement("tbody");
+          table2.appendChild(tbody2);
+          for (let i = splitIdx; i < rows.length; i++) {
+            tbody2.appendChild(rows[i]);
+          }
+          queue.unshift(table2);
+          current = createPageSection(section, targetHeight);
+          container.insertBefore(current.section, section);
+          pages.push(current.section);
+          currentUsedHeight = 0;
+          continue;
+        }
+      }
+    } else if (item.tagName === "P" && item.childNodes.length > 1) {
+      const children = Array.from(item.childNodes);
+      current.article.removeChild(item);
+
+      const p1 = item.cloneNode(false) as HTMLElement;
+      current.article.appendChild(p1);
+
+      const half = Math.ceil(children.length / 2);
+      for (let i = 0; i < half; i++) {
+        p1.appendChild(children[i]);
+      }
+
+      const p2 = item.cloneNode(false) as HTMLElement;
+      for (let i = half; i < children.length; i++) {
+        p2.appendChild(children[i]);
+      }
+      queue.unshift(p2);
+      current = createPageSection(section, targetHeight);
+      container.insertBefore(current.section, section);
+      pages.push(current.section);
+      currentUsedHeight = 0;
+      continue;
+    }
+
+    // Indivisible item or already at limit, keep on current page and move on
+    currentUsedHeight = availableHeight;
+  }
+
+  // Remove the original overflowing section from DOM
+  section.remove();
+  return pages;
+}
+
 async function renderDocxPages(
   arrayBuffer: ArrayBuffer,
   container: HTMLElement
@@ -125,7 +322,47 @@ async function renderDocxPages(
     if (isTimeoutError(error)) throw error;
     throw conversionFailedError();
   }
-  return Array.from(container.querySelectorAll<HTMLElement>(".docx-wrapper > section"));
+
+  const rawSections = Array.from(
+    container.querySelectorAll<HTMLElement>(".docx-wrapper > section")
+  );
+
+  const paginatedSections: HTMLElement[] = [];
+  for (const section of rawSections) {
+    const targetHeight = parseLengthToPx(section.style.minHeight, 1122.5);
+    const scrollHeight = section.scrollHeight;
+    const rectHeight = section.getBoundingClientRect().height;
+    const currentHeight = Math.max(scrollHeight, rectHeight);
+
+    if (currentHeight > targetHeight * 1.08) {
+      // Document or section has no page breaks and overflows standard page height:
+      // Paginates content across discrete pages.
+      const splitPages = paginateOverflowingSection(section, targetHeight, container);
+      for (const p of splitPages) {
+        paginatedSections.push(p);
+      }
+    } else {
+      section.style.height = `${targetHeight}px`;
+      section.style.minHeight = `${targetHeight}px`;
+      section.style.maxHeight = `${targetHeight}px`;
+      section.style.overflow = "hidden";
+      section.style.boxSizing = "border-box";
+      paginatedSections.push(section);
+    }
+  }
+
+  // Prune phantom empty sections (e.g. trailing empty sections from page breaks at end of file)
+  const validSections = paginatedSections.filter((sec) => !isSectionEmpty(sec));
+  if (validSections.length > 0) {
+    // Remove pruned sections from container
+    for (const sec of paginatedSections) {
+      if (isSectionEmpty(sec)) sec.remove();
+    }
+    return validSections;
+  }
+
+  // If every section was empty, keep at least one
+  return paginatedSections.slice(0, 1);
 }
 
 async function renderPptxPages(

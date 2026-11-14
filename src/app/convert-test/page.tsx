@@ -77,6 +77,57 @@ async function runTests(): Promise<{
     check("docx: converts without error", false, String(error));
   }
 
+  // --- .docx without page breaks (auto-pagination) ---
+  try {
+    const t0 = performance.now();
+    const converted = await convertOfficeToPdf(await loadFixture("fixture-long-nobreak.docx"));
+    durations["fixture-long-nobreak.docx"] = Math.round(performance.now() - t0);
+
+    check(
+      "docx no-break: auto-paginated into multiple pages (>1 page)",
+      converted.pages > 1,
+      `pages=${converted.pages}`
+    );
+
+    const bytes = new Uint8Array(await converted.pdfFile.arrayBuffer());
+    const back = await PDFDocument.load(bytes);
+    check(
+      "docx no-break: PDF matches paginated page count",
+      back.getPageCount() === converted.pages,
+      `pdfPages=${back.getPageCount()}, converted=${converted.pages}`
+    );
+    check(
+      "docx no-break: preview urls match page count",
+      converted.previewUrls.length === converted.pages,
+      `previews=${converted.previewUrls.length}`
+    );
+  } catch (error) {
+    check("docx no-break: converts without error", false, String(error));
+  }
+
+  // --- .docx with trailing page break (empty page pruning) ---
+  try {
+    const t0 = performance.now();
+    const converted = await convertOfficeToPdf(await loadFixture("fixture-trailing-break.docx"));
+    durations["fixture-trailing-break.docx"] = Math.round(performance.now() - t0);
+
+    check(
+      "docx trailing-break: prunes phantom empty page (pages === 2)",
+      converted.pages === 2,
+      `pages=${converted.pages}`
+    );
+
+    const bytes = new Uint8Array(await converted.pdfFile.arrayBuffer());
+    const back = await PDFDocument.load(bytes);
+    check(
+      "docx trailing-break: PDF has exactly 2 pages",
+      back.getPageCount() === 2,
+      `pdfPages=${back.getPageCount()}`
+    );
+  } catch (error) {
+    check("docx trailing-break: converts without error", false, String(error));
+  }
+
   // --- .docm conversion ---
   try {
     const t0 = performance.now();

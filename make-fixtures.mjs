@@ -239,4 +239,94 @@ writeFileSync(`${outDir}/fixture.ppt`, Buffer.concat([ole, Buffer.from("legacy-p
 // ---------------- Garbage wearing a .docx extension ----------------
 writeFileSync(`${outDir}/garbage.docx`, "this is not a real docx file at all");
 
+// ---------------- fixture-long-nobreak.docx : A4, 30 paragraphs with NO page breaks ----------------
+{
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="${CT_NS}">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${RELS_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`
+  );
+  zip.file(
+    "word/_rels/document.xml.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${RELS_NS}"></Relationships>`
+  );
+  const paragraphs = Array.from({ length: 30 }, (_, i) => {
+    const text = `Paragraph ${i + 1}: Campus Connect automatic document pagination test paragraph. This is long continuous content simulating a document created in Google Docs or Microsoft Word without any manual page breaks inserted. It must be paginated cleanly across multiple standard pages instead of rendering as a single oversized continuous page.`;
+    return `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
+  }).join("\n");
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+${paragraphs}
+  <w:sectPr>
+    <w:pgSz w:w="11906" w:h="16838"/>
+    <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+  </w:sectPr>
+</w:body>
+</w:document>`
+  );
+  const buf = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  writeFileSync(`${outDir}/fixture-long-nobreak.docx`, buf);
+}
+
+// ---------------- fixture-trailing-break.docx : 2 real pages + trailing page break and empty paragraph ----------------
+{
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="${CT_NS}">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${RELS_NS}">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`
+  );
+  zip.file(
+    "word/_rels/document.xml.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${RELS_NS}"></Relationships>`
+  );
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+  <w:p><w:r><w:t xml:space="preserve">Real page 1 content here.</w:t></w:r></w:p>
+  <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+  <w:p><w:r><w:t xml:space="preserve">Real page 2 content here.</w:t></w:r></w:p>
+  <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+  <w:p/>
+  <w:sectPr>
+    <w:pgSz w:w="11906" w:h="16838"/>
+    <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+  </w:sectPr>
+</w:body>
+</w:document>`
+  );
+  const buf = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  writeFileSync(`${outDir}/fixture-trailing-break.docx`, buf);
+}
+
 console.log("fixtures written to", outDir);

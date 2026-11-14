@@ -543,9 +543,17 @@ export default function Home() {
 
             {/* Document Cards (Screenshot 3 & 4) */}
             {files.map((file) => {
-              const selectedCount = parsePageSelection(file.pageSelection, file.pages).length;
-              const colorPagesCount = file.colorCoverage.filter((c) => c > 0.005).length;
-              const bwPagesCount = Math.max(0, file.pages - colorPagesCount);
+              const selectedPages = parsePageSelection(file.pageSelection, file.pages);
+              const selectedCount = selectedPages.length;
+              const isPartialSelection = file.pageSelection !== "all" && selectedCount < file.pages;
+
+              let colorPagesCount = 0;
+              let bwPagesCount = 0;
+              for (const p of selectedPages) {
+                const coverage = file.colorCoverage[p - 1] ?? 0;
+                if (coverage > 0.005) colorPagesCount++;
+                else bwPagesCount++;
+              }
 
               return (
                 <article className="document-card" key={file.id}>
@@ -596,8 +604,12 @@ export default function Home() {
                       {/* 3 Large Stat Badges (Screenshot 3) */}
                       <div className="stat-triplet">
                         <div className="stat-box highlight">
-                          <span className="stat-number">{file.pages}</span>
-                          <span className="stat-label">Pages</span>
+                          <span className="stat-number">
+                            {isPartialSelection ? `${selectedCount} of ${file.pages}` : file.pages}
+                          </span>
+                          <span className="stat-label">
+                            {isPartialSelection ? "Selected Pages" : "Pages"}
+                          </span>
                         </div>
                         <div className="stat-box">
                           <span className="stat-number">{colorPagesCount}</span>
@@ -741,7 +753,8 @@ export default function Home() {
                         <div>
                           <h4 className="setting-title">Copies</h4>
                           <p className="setting-desc">
-                            {file.pages} pages × {file.copies} = {file.pages * file.copies} printed pages
+                            {selectedCount} {selectedCount === 1 ? "page" : "pages"} × {file.copies} = {selectedCount * file.copies} printed pages
+                            {isPartialSelection && ` (${file.pages} in file)`}
                           </p>
                         </div>
                         <div className="stepper-control">
@@ -840,7 +853,7 @@ export default function Home() {
 
               <h2 className="quote-price-tag">{formatNaira(quote.total)}</h2>
               <p className="setting-desc" style={{ marginTop: -10 }}>
-                {files.length} {files.length === 1 ? "document" : "documents"} · {quote.copyPages} pages
+                {files.length} {files.length === 1 ? "document" : "documents"} · {quote.copyPages} printed {quote.copyPages === 1 ? "page" : "pages"} ({quote.physicalSheets} {quote.physicalSheets === 1 ? "sheet" : "sheets"})
               </p>
 
               {nightRate && (
