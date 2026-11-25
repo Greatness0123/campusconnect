@@ -343,11 +343,17 @@ export default function AdminPage() {
         });
       }
 
-      await fetch("/api/push/subscribe", {
+      const saveRes = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subscription: sub.toJSON() }),
       });
+      const saveData = await saveRes.json() as { ok?: boolean; error?: string };
+      if (!saveData.ok) {
+        // Subscription saved in browser but server couldn't persist it
+        console.warn("[push] Server could not save subscription:", saveData.error);
+        setTestPushStatus(`⚠️ Registered in browser but server error: ${saveData.error ?? "unknown"} — check Supabase table & env vars.`);
+      }
 
       setPushSubscribed(true);
       playAlertChime();
@@ -371,12 +377,16 @@ export default function AdminPage() {
           url: "/ccadmin",
         }),
       });
-      const data = await res.json();
+      const data = await res.json() as { ok?: boolean; delivered?: number; total?: number; error?: string };
       if (data.ok) {
-        setTestPushStatus(`Delivered to ${data.delivered} device(s)! Check your screen.`);
-        setTimeout(() => setTestPushStatus(null), 5000);
+        if (data.total === 0) {
+          setTestPushStatus("⚠️ 0 devices in database — run the SQL migration in Supabase & add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars, then re-enable alerts.");
+        } else {
+          setTestPushStatus(`✅ Sent to ${data.delivered}/${data.total} device(s)! Check your screen.`);
+        }
+        setTimeout(() => setTestPushStatus(null), 8000);
       } else {
-        setTestPushStatus("Failed to send test push.");
+        setTestPushStatus(`❌ Failed: ${data.error ?? "unknown error"}`);
       }
     } catch {
       setTestPushStatus("Network error sending test alert.");

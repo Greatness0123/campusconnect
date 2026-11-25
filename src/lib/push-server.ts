@@ -1,5 +1,5 @@
 import { setVapidDetails, sendNotification } from "web-push";
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { createClient } from "@supabase/supabase-js";
 
 export const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
@@ -18,6 +18,27 @@ try {
   console.warn("Failed to set VAPID details:", err);
 }
 
+/**
+ * Server-side Supabase client using the SERVICE ROLE key.
+ * This bypasses RLS so push subscriptions can be read from any serverless lambda.
+ * This module is ONLY imported in API routes (server-side) — never in client components.
+ */
+function getAdminSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  // Prefer service role key; fall back to anon key with a warning
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "";
+
+  if (!url || !key) {
+    return null;
+  }
+  return createClient(url, key, {
+    auth: { persistSession: false },
+  });
+}
+
 export type StoredPushSubscription = {
   endpoint: string;
   keys: {
@@ -27,85 +48,79 @@ export type StoredPushSubscription = {
   userAgent?: string;
 };
 
-// In-memory fallback in case Supabase is offline or table has not yet been migrated
-const memorySubscriptions = new Map<string, StoredPushSubscription>();
-
 export async function savePushSubscription(sub: StoredPushSubscription): Promise<boolean> {
   if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+    console.warn("[push] savePushSubscription: missing fields", sub);
     return false;
   }
 
-  memorySubscriptions.set(sub.endpoint, sub);
-
-  if (supabase && isSupabaseConfigured) {
-    try {
-      const { error } = await supabase.from("admin_push_subscriptions").upsert(
-        {
-          endpoint: sub.endpoint,
-          p256dh: sub.keys.p256dh,
-          auth: sub.keys.auth,
-          user_agent: sub.userAgent || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "endpoint" }
-      );
-      if (error) {
-        console.warn("Supabase push subscription upsert notice:", error.message);
-      }
-    } catch (err) {
-      console.warn("Error saving push subscription to Supabase:", err);
-    }
+  const db = getAdminSupabase();
+  if (!db) {
+    console.warn("[push] savePushSubscription: Supabase not configured — subscription NOT persisted");
+    // Return true so the client thinks it succeeded; they'll re-subscribe next visit
+    return true;
   }
 
+  const { error } = await db.from("admin_push_subscriptions").upsert(
+    {
+      endpoint: sub.endpoint,
+      p256dh: sub.keys.p256dh,
+      auth: sub.keys.auth,
+      user_agent: sub.userAgent || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "endpoint" }
+  );
+
+  if (error) {
+    console.error("[push] savePushSubscription Supabase error:", error.message, error.details);
+    return false;
+  }
+
+  console.log("[push] Subscription saved:", sub.endpoint.slice(0, 60) + "…");
   return true;
 }
 
 export async function getAllPushSubscriptions(): Promise<StoredPushSubscription[]> {
-  const combined = new Map<string, StoredPushSubscription>();
-
-  // Add memory subs first
-  for (const [endpoint, sub] of memorySubscriptions.entries()) {
-    combined.set(endpoint, sub);
+  const db = getAdminSupabase();
+  if (!db) {
+    console.warn("[push] getAllPushSubscriptions: Supabase not configured — returning []");
+    return [];
   }
 
-  // Fetch from Supabase if configured
-  if (supabase && isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase
-        .from("admin_push_subscriptions")
-        .select("endpoint, p256dh, auth, user_agent");
+  const { data, error } = await db
+    .from("admin_push_subscriptions")
+    .select("endpoint, p256dh, auth, user_agent");
 
-      if (!error && Array.isArray(data)) {
-        for (const row of data) {
-          if (row.endpoint && row.p256dh && row.auth) {
-            combined.set(row.endpoint, {
-              endpoint: row.endpoint,
-              keys: {
-                p256dh: row.p256dh,
-                auth: row.auth,
-              },
-              userAgent: row.user_agent ?? undefined,
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("Error reading push subscriptions from Supabase:", err);
-    }
+  if (error) {
+    console.error("[push] getAllPushSubscriptions Supabase error:", error.message, error.details);
+    return [];
   }
 
-  return Array.from(combined.values());
+  if (!Array.isArray(data) || data.length === 0) {
+    console.log("[push] getAllPushSubscriptions: 0 rows in table");
+    return [];
+  }
+
+  const subs: StoredPushSubscription[] = data
+    .filter((row) => row.endpoint && row.p256dh && row.auth)
+    .map((row) => ({
+      endpoint: row.endpoint,
+      keys: { p256dh: row.p256dh, auth: row.auth },
+      userAgent: row.user_agent ?? undefined,
+    }));
+
+  console.log(`[push] getAllPushSubscriptions: found ${subs.length} subscription(s)`);
+  return subs;
 }
 
 export async function removePushSubscription(endpoint: string): Promise<void> {
-  memorySubscriptions.delete(endpoint);
-
-  if (supabase && isSupabaseConfigured) {
-    try {
-      await supabase.from("admin_push_subscriptions").delete().eq("endpoint", endpoint);
-    } catch {
-      // ignore
-    }
+  const db = getAdminSupabase();
+  if (!db) return;
+  try {
+    await db.from("admin_push_subscriptions").delete().eq("endpoint", endpoint);
+  } catch {
+    // ignore
   }
 }
 
@@ -139,34 +154,25 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
   const pushPromises = subscriptions.map(async (sub) => {
     try {
       await sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: sub.keys,
-        },
+        { endpoint: sub.endpoint, keys: sub.keys },
         notificationPayloadString,
-        {
-          TTL: 60 * 60 * 24, // 24 hours
-          urgency: "high",
-        }
+        { TTL: 60 * 60 * 24, urgency: "high" }
       );
       successCount += 1;
     } catch (err: unknown) {
       failureCount += 1;
       const statusCode = (err as { statusCode?: number })?.statusCode;
-      // 404 or 410 means device unregistered or subscription expired
       if (statusCode === 404 || statusCode === 410) {
+        console.log("[push] Removing expired subscription:", sub.endpoint.slice(0, 60));
         void removePushSubscription(sub.endpoint);
       } else {
-        console.warn("Web Push send failure:", err);
+        console.warn("[push] sendNotification failed:", err);
       }
     }
   });
 
   await Promise.allSettled(pushPromises);
+  console.log(`[push] broadcast done: ${successCount} ok, ${failureCount} failed`);
 
-  return {
-    successCount,
-    failureCount,
-    totalSubscribers: subscriptions.length,
-  };
+  return { successCount, failureCount, totalSubscribers: subscriptions.length };
 }
