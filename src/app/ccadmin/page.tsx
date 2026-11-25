@@ -269,6 +269,25 @@ export default function AdminPage() {
     void checkExistingPush();
   }, [authState]);
 
+  // Swap the page manifest so "Add to Home Screen" installs to /ccadmin, not /.
+  useEffect(() => {
+    const existing = document.querySelector<HTMLLinkElement>("link[rel='manifest']");
+    const prev = existing?.href ?? null;
+    if (existing) {
+      existing.href = "/api/manifest-admin";
+    } else {
+      const link = document.createElement("link");
+      link.rel = "manifest";
+      link.href = "/api/manifest-admin";
+      document.head.appendChild(link);
+    }
+    return () => {
+      // Restore original manifest when navigating away
+      const el = document.querySelector<HTMLLinkElement>("link[rel='manifest']");
+      if (el && prev) el.href = prev;
+    };
+  }, []);
+
   async function submitPassphrase(event: React.FormEvent) {
     event.preventDefault();
     if (verifying) return;
