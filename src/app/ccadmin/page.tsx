@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { PwaInstallBanner } from "@/components/pwa-install-banner";
 import { DEMO_ORDERS_KEY, type DemoOrder, type DemoOrderDocument, readDemoOrders } from "@/lib/demo-orders";
 import { getPlacedOrderDraft } from "@/lib/order-draft";
 import {
@@ -666,6 +667,7 @@ export default function AdminPage() {
   return (
     <main className="admin-shell">
       <AppHeader showOrders={false} />
+      <PwaInstallBanner variant="admin" />
 
       <div className="admin-container">
         {/* Header Row */}

@@ -16,6 +16,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { PwaInstallBanner } from "@/components/pwa-install-banner";
 import { estimateColorCoverage } from "@/lib/analysis";
 import { useClock } from "@/lib/clock";
 import { convertOfficeToPdf, isOfficeFilename } from "@/lib/office-to-pdf";
@@ -455,6 +456,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <AppHeader userName={name} onChangeName={changeName} />
+      <PwaInstallBanner variant="student" />
 
       <div className="page-wrap">
         {/* Page Heading & Welcome (Screenshot 2) */}

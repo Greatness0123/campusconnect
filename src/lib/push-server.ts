@@ -3,11 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 
 export const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-  "BGj2QZfzbGVhcc3UT4uz21Jk9UaNMQL7awcl2AYM4sMg1jv-xDYrfqKZKD-PsEyLgj9TJwUd8I7xl2sMLBGm9YI";
+  "BDiVordInD0OC-TFYoMRcWz1p5DaJDJyjIdvi1JhBbyMlWKKOAEqB5vmXcM_vxGo2WytIW9kVhsojM5zT197X_U";
 
 export const VAPID_PRIVATE_KEY =
   process.env.VAPID_PRIVATE_KEY ||
-  "nPs68733cZuJlozi8h5KAEqooh2uahTMHw9phtP9-TM";
+  "KjQSXoVaJ1LLgqqea4lWBLmBV-_pfIm5v86OpO_QzVU";
 
 export const VAPID_SUBJECT =
   process.env.VAPID_SUBJECT || "mailto:admin@campusconnect.ng";
