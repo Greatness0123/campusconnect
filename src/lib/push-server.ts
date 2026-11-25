@@ -131,14 +131,21 @@ export type PushNotificationPayload = {
   tag?: string;
 };
 
+export type PushSendError = {
+  endpoint: string;
+  statusCode?: number;
+  message?: string;
+};
+
 export async function broadcastPushNotification(payload: PushNotificationPayload): Promise<{
   successCount: number;
   failureCount: number;
   totalSubscribers: number;
+  errors: PushSendError[];
 }> {
   const subscriptions = await getAllPushSubscriptions();
   if (subscriptions.length === 0) {
-    return { successCount: 0, failureCount: 0, totalSubscribers: 0 };
+    return { successCount: 0, failureCount: 0, totalSubscribers: 0, errors: [] };
   }
 
   const notificationPayloadString = JSON.stringify({
@@ -150,6 +157,7 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
 
   let successCount = 0;
   let failureCount = 0;
+  const errors: PushSendError[] = [];
 
   const pushPromises = subscriptions.map(async (sub) => {
     try {
@@ -159,14 +167,30 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
         { TTL: 60 * 60 * 24, urgency: "high" }
       );
       successCount += 1;
+      console.log("[push] ✓ sent to:", sub.endpoint.slice(0, 60));
     } catch (err: unknown) {
       failureCount += 1;
-      const statusCode = (err as { statusCode?: number })?.statusCode;
+      const e = err as { statusCode?: number; body?: string; message?: string };
+      const statusCode = e?.statusCode;
+      const errMsg = e?.body ?? e?.message ?? String(err);
+
+      console.error(
+        `[push] ✗ send failed — status ${statusCode} — endpoint: ${sub.endpoint.slice(0, 60)}\n  body: ${errMsg}`
+      );
+
+      errors.push({
+        endpoint: sub.endpoint.slice(0, 80),
+        statusCode,
+        message: errMsg?.slice(0, 200),
+      });
+
+      // 404 / 410 = subscription gone — purge it
       if (statusCode === 404 || statusCode === 410) {
-        console.log("[push] Removing expired subscription:", sub.endpoint.slice(0, 60));
         void removePushSubscription(sub.endpoint);
-      } else {
-        console.warn("[push] sendNotification failed:", err);
+      }
+      // 401 / 403 = VAPID mismatch or expired — purge so admin can re-subscribe
+      if (statusCode === 401 || statusCode === 403) {
+        void removePushSubscription(sub.endpoint);
       }
     }
   });
@@ -174,5 +198,5 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
   await Promise.allSettled(pushPromises);
   console.log(`[push] broadcast done: ${successCount} ok, ${failureCount} failed`);
 
-  return { successCount, failureCount, totalSubscribers: subscriptions.length };
+  return { successCount, failureCount, totalSubscribers: subscriptions.length, errors };
 }

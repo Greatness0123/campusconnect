@@ -11,17 +11,14 @@ export async function POST(request: Request) {
     const url = typeof body.url === "string" ? body.url : "/ccadmin";
     const tag = typeof body.tag === "string" ? body.tag : "campusconnect-order";
 
-    const result = await broadcastPushNotification({
-      title,
-      body: content,
-      url,
-      tag,
-    });
+    const result = await broadcastPushNotification({ title, body: content, url, tag });
 
     return NextResponse.json({
       ok: true,
       delivered: result.successCount,
+      failed: result.failureCount,
       total: result.totalSubscribers,
+      errors: result.errors,
     });
   } catch (err) {
     console.error("Error sending push notification:", err);

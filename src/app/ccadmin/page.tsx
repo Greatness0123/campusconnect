@@ -377,14 +377,37 @@ export default function AdminPage() {
           url: "/ccadmin",
         }),
       });
-      const data = await res.json() as { ok?: boolean; delivered?: number; total?: number; error?: string };
+      const data = await res.json() as {
+        ok?: boolean;
+        delivered?: number;
+        failed?: number;
+        total?: number;
+        error?: string;
+        errors?: { endpoint: string; statusCode?: number; message?: string }[];
+      };
       if (data.ok) {
         if (data.total === 0) {
-          setTestPushStatus("⚠️ 0 devices in database — run the SQL migration in Supabase & add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars, then re-enable alerts.");
+          setTestPushStatus("⚠️ 0 devices in DB — run the SQL migration in Supabase & add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars, then re-enable alerts.");
+        } else if ((data.delivered ?? 0) === 0 && (data.total ?? 0) > 0) {
+          // All sends failed — likely VAPID key mismatch (401/403) or stale subscriptions
+          const firstErr = data.errors?.[0];
+          const code = firstErr?.statusCode;
+          const isVapid = code === 401 || code === 403;
+          const isGone = code === 404 || code === 410;
+          if (isVapid || isGone) {
+            setPushSubscribed(false);
+            setTestPushStatus(
+              `⚠️ All ${data.total} subscription(s) rejected (HTTP ${code} — ${isVapid ? "VAPID key mismatch" : "subscriptions expired"}). Stale entries purged. Please click "Enable Alerts" again to re-subscribe.`
+            );
+          } else {
+            setTestPushStatus(
+              `❌ Sent to 0/${data.total} — error ${code ?? "unknown"}: ${firstErr?.message?.slice(0, 120) ?? "check Vercel logs"}`
+            );
+          }
         } else {
           setTestPushStatus(`✅ Sent to ${data.delivered}/${data.total} device(s)! Check your screen.`);
+          setTimeout(() => setTestPushStatus(null), 6000);
         }
-        setTimeout(() => setTestPushStatus(null), 8000);
       } else {
         setTestPushStatus(`❌ Failed: ${data.error ?? "unknown error"}`);
       }
