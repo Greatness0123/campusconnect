@@ -642,63 +642,55 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Persistent Web Push Notification banner (admin only) */}
-        <div className="admin-alert" style={{ marginBottom: 18, alignItems: "center" }}>
-          <BellRing size={20} style={{ color: pushSubscribed ? "var(--success, #22c55e)" : "inherit" }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <strong>
-                {pushSubscribed ? "Persistent Web Push Active" : "Persistent Background Notifications"}
-              </strong>
-              {pushSubscribed && (
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    padding: "2px 6px",
-                    borderRadius: 4,
-                    background: "rgba(34, 197, 94, 0.2)",
-                    color: "var(--success, #22c55e)",
-                  }}
-                >
-                  Background Enabled
+        {/* Persistent Web Push Notification Card (admin only) */}
+        <div className={`admin-push-card${pushSubscribed ? " is-active" : ""}`}>
+          <div className="admin-push-card-main">
+            <div className="admin-push-card-icon-wrap">
+              <BellRing size={18} />
+            </div>
+            <div className="admin-push-card-content">
+              <div className="admin-push-card-header">
+                <h3 className="admin-push-card-title">
+                  {pushSubscribed ? "Background Alerts Active" : "Background Notifications"}
+                </h3>
+                <span className={`admin-push-card-badge${pushSubscribed ? " success" : " muted"}`}>
+                  {pushSubscribed ? "Live" : "Off"}
                 </span>
+              </div>
+              <p className="admin-push-card-desc">
+                {pushSubscribed
+                  ? "This device will receive alerts even when this site is fully closed."
+                  : notifPermission === "denied"
+                  ? "Notifications blocked — allow them in browser site settings."
+                  : notifPermission === "unsupported"
+                  ? "This browser does not support Web Push notifications."
+                  : "Get instant alerts on this device when orders arrive — even when the site is closed. iPhone/iPad: Add to Home Screen first."}
+              </p>
+              {testPushStatus && (
+                <div className="admin-push-card-status">
+                  <Bell size={12} /> {testPushStatus}
+                </div>
               )}
             </div>
-            <p style={{ marginTop: 2 }}>
-              {pushSubscribed
-                ? "This device is registered. You will receive real-time banner alerts and audio rings even when this tab or browser is completely closed."
-                : notifPermission === "denied"
-                ? "Notifications are blocked. Please allow notifications in your browser's site settings to get order alerts."
-                : notifPermission === "unsupported"
-                ? "This browser does not support Web Push notifications."
-                : "Get instant sound & banner alerts on this device whenever a student places an order — even when this site is closed. (On iPhone / iPad: Tap Share → 'Add to Home Screen' and open as an app first)."}
-            </p>
-            {testPushStatus && (
-              <small style={{ color: "var(--accent, #f5b84c)", display: "block", marginTop: 4, fontWeight: 600 }}>
-                {testPushStatus}
-              </small>
-            )}
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="admin-push-card-actions">
             {pushSubscribed ? (
               <button
-                className="admin-action-btn"
+                className="admin-action-btn admin-push-action-btn"
                 type="button"
                 onClick={sendTestPush}
-                title="Send a test notification to verify your device receives alerts in the background"
+                title="Send a test notification"
               >
                 <Bell size={13} /> Send Test Alert
               </button>
             ) : (
               <button
-                className="admin-action-btn primary"
+                className="admin-action-btn primary admin-push-action-btn"
                 type="button"
                 onClick={enablePushNotifications}
                 disabled={pushLoading || notifPermission === "denied"}
               >
-                <Bell size={13} /> {pushLoading ? "Activating…" : "Enable Background Alerts"}
+                <Bell size={13} /> {pushLoading ? "Activating…" : "Enable Alerts"}
               </button>
             )}
           </div>
