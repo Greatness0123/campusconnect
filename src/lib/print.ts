@@ -1,4 +1,4 @@
-export type LocationArea = "Uptown" | "Middletown" | "Downtown";
+export type LocationArea = "Uptown" | "Middletown" | "Downtown" | "Other";
 
 export const locationOptions: Record<LocationArea, string[]> = {
   Uptown: [
@@ -39,6 +39,7 @@ export const locationOptions: Record<LocationArea, string[]> = {
     "Colmans Building",
   ],
   Downtown: ["Silver 2", "Silver 3", "New Hall Male", "New Hall Female", "JAC"],
+  Other: ["Other / Not listed"],
 };
 
 export type HostelAccount = {
@@ -67,10 +68,19 @@ export const hostelAccounts: Record<LocationArea, HostelAccount> = {
     accountNumber: "3004418439",
     badge: "Downtown · Silver 2",
   },
+  Other: {
+    bank: "Kuda MFB",
+    accountName: "Campus Co Enterprise - Hall B",
+    accountNumber: "3004376180",
+    badge: "Middletown · Default",
+  },
 };
 
-export function getHostelAccount(area: LocationArea, _location?: string): HostelAccount {
-  return hostelAccounts[area] ?? hostelAccounts.Uptown;
+export function getHostelAccount(area: LocationArea | string, _location?: string): HostelAccount {
+  if (area === "Other" || !(area in hostelAccounts)) {
+    return hostelAccounts.Other;
+  }
+  return hostelAccounts[area as LocationArea] ?? hostelAccounts.Other;
 }
 
 export const pricing = {
@@ -84,12 +94,28 @@ export const pricing = {
   binding: 500,
 };
 
-// Night curfew window: orders placed between 10pm and 6am use the night B&W rates.
-export const NIGHT_RATE_START_HOUR = 22;
-export const NIGHT_RATE_END_HOUR = 6;
+// Night curfew window: orders placed between 10pm and 8am use the night B&W rates.
+export const NIGHT_RATE_START_HOUR = 22; // 10pm
+export const NIGHT_RATE_END_HOUR = 8; // 8am
+
+/** Returns the current hour in West Africa Time (Africa/Lagos, UTC+1, no DST). */
+export function getLagosHour(date: Date = new Date()): number {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Africa/Lagos",
+      hour: "numeric",
+      hourCycle: "h23",
+    });
+    const parsed = parseInt(formatter.format(date), 10);
+    if (!Number.isNaN(parsed)) return parsed;
+  } catch {
+    // fallback if Intl timeZone is unsupported
+  }
+  return (date.getUTCHours() + 1) % 24;
+}
 
 export function isNightRate(date: Date = new Date()): boolean {
-  const hour = date.getHours();
+  const hour = getLagosHour(date);
   return hour >= NIGHT_RATE_START_HOUR || hour < NIGHT_RATE_END_HOUR;
 }
 
@@ -191,7 +217,7 @@ export type Quote = {
   anyStapled: boolean;
   anyBound: boolean;
   anyDuplex: boolean;
-  /** True when the quote was priced inside the 10pm–6am night window. */
+  /** True when the quote was priced inside the 10pm–8am night window. */
   night: boolean;
   perFile: FileQuote[];
 };
@@ -212,12 +238,16 @@ export function computeQuote(files: QuoteFileInput[], night: boolean = isNightRa
   for (const file of files) {
     if (file.status !== "ready") continue;
 
-    const monoRate = monoPageRate(file.sides, night);
-    const lightRate = file.sides === "duplex" ? pricing.duplexColor : pricing.colorLight;
-    const heavyRate = file.sides === "duplex" ? pricing.duplexColor : pricing.colorHeavy;
-
     const selected = parsePageSelection(file.pageSelection, file.pages);
     const copies = Math.max(1, file.copies);
+
+    // If only 1 page is being printed, duplex (front & back) is physically impossible
+    // and pricing must not allow the discounted duplex rate. Force effective sides to "single".
+    const effectiveSides: Sides = selected.length <= 1 ? "single" : file.sides;
+
+    const monoRate = monoPageRate(effectiveSides, night);
+    const lightRate = effectiveSides === "duplex" ? pricing.duplexColor : pricing.colorLight;
+    const heavyRate = effectiveSides === "duplex" ? pricing.duplexColor : pricing.colorHeavy;
 
     let fileBw = 0;
     let fileLight = 0;
@@ -236,7 +266,7 @@ export function computeQuote(files: QuoteFileInput[], night: boolean = isNightRa
     const lightTotal = fileLight * copies;
     const heavyTotal = fileHeavy * copies;
     const printedPages = selected.length * copies;
-    const sheets = file.sides === "duplex" ? Math.ceil(printedPages / 2) : printedPages;
+    const sheets = effectiveSides === "duplex" ? Math.ceil(printedPages / 2) : printedPages;
     const filePrintCost = bwTotal * monoRate + lightTotal * lightRate + heavyTotal * heavyRate;
     const fileBindingCost = file.bound ? copies * pricing.binding : 0;
 
@@ -249,7 +279,7 @@ export function computeQuote(files: QuoteFileInput[], night: boolean = isNightRa
     finishingCost += fileBindingCost;
     if (file.stapled) anyStapled = true;
     if (file.bound) anyBound = true;
-    if (file.sides === "duplex") anyDuplex = true;
+    if (effectiveSides === "duplex") anyDuplex = true;
 
     perFile.push({
       id: file.id,
@@ -263,7 +293,7 @@ export function computeQuote(files: QuoteFileInput[], night: boolean = isNightRa
       printCost: filePrintCost,
       bindingCost: fileBindingCost,
       totalCost: filePrintCost + fileBindingCost,
-      sides: file.sides,
+      sides: effectiveSides,
       stapled: file.stapled,
       bound: file.bound,
     });

@@ -425,7 +425,7 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
           <div className="order-summary-row">
             <span>{isDeliveryOrder ? "Delivery" : "Pickup"}</span>
             <strong>
-              {order.area} · {order.location}
+              {order.area === "Other" ? order.location : `${order.area} · ${order.location}`}
             </strong>
           </div>
           {isDeliveryOrder && (

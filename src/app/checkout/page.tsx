@@ -64,6 +64,7 @@ export default function CheckoutPage() {
   const [phone, setPhone] = useState("");
   const [area, setArea] = useState<LocationArea>("Uptown");
   const [location, setLocation] = useState(locationOptions.Uptown[0]);
+  const [customLocation, setCustomLocation] = useState("");
   const [fulfilment, setFulfilment] = useState<Fulfilment>("collection");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +107,9 @@ export default function CheckoutPage() {
     setDraft(existing);
     setArea(existing.area);
     setLocation(existing.location);
+    if (existing.area === "Other") {
+      setCustomLocation(existing.location);
+    }
     if (existing.fulfilment) {
       setFulfilment(existing.fulfilment);
     }
@@ -127,9 +131,10 @@ export default function CheckoutPage() {
   const deliveryCharge = fulfilment === "collection" ? 0 : deliveryTiers[fulfilment].fee;
   const grandTotal = (quote?.total ?? 0) + deliveryCharge;
 
-  const areaOptions = Object.keys(locationOptions) as LocationArea[];
+  const areaDropdownOptions = ["Uptown", "Middletown", "Downtown", "Other (Not listed)"];
   const activeAccount = getHostelAccount(area, location);
-  const isReadyForPayment = Boolean(location && phone.trim().length >= 7);
+  const isLocationValid = Boolean(location && location.trim().length > 0 && location !== "Other / Not listed");
+  const isReadyForPayment = Boolean(isLocationValid && phone.trim().length >= 7);
 
   function copyAccountNumber() {
     void navigator.clipboard?.writeText(activeAccount.accountNumber).then(() => {
@@ -140,6 +145,10 @@ export default function CheckoutPage() {
 
   async function placeOrder() {
     if (!draft || !quote || placing) return;
+    if (!location || !location.trim() || location === "Other / Not listed") {
+      setError("Please specify your pickup or delivery location.");
+      return;
+    }
     if (!phone.trim()) {
       setError("Please enter a phone number so the print desk can reach you.");
       return;
@@ -177,6 +186,18 @@ export default function CheckoutPage() {
         fulfilment,
         orderId: existingOrderId,
       });
+
+      // Broadcast Web Push to all subscribed operators
+      void fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Payment Confirmed! 💳",
+          body: `Order ${existingOrderId} from ${draft.customer} re-confirmed payment.`,
+          url: "/ccadmin",
+          tag: `order-${existingOrderId}`,
+        }),
+      }).catch(() => {});
 
       setPlacing(false);
       router.replace(`/order/${existingOrderId}`);
@@ -308,6 +329,18 @@ export default function CheckoutPage() {
       orderId,
     });
 
+    // Broadcast Web Push to all subscribed operator devices (works even if site/tab is closed!)
+    void fetch("/api/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "New Print Order! 🖨️",
+        body: `Order ${orderId} from ${draft.customer} (${area === "Other" ? location : `${area} · ${location}`}) · ${formatNaira(grandTotal)}`,
+        url: "/ccadmin",
+        tag: `order-${orderId}`,
+      }),
+    }).catch(() => {});
+
     setPlacing(false);
     clearOrderDraft();
     router.replace(`/order/${orderId}`);
@@ -418,7 +451,7 @@ export default function CheckoutPage() {
             <div className="receipt-divider" />
             {nightRate && (
               <div className="receipt-row">
-                <span>Night rates (10pm–6am)</span>
+                <span>Night rates (10pm–8am)</span>
                 <strong>
                   B&amp;W {formatNaira(pricing.monoNight)}/pg · duplex{" "}
                   {formatNaira(pricing.duplexMonoNight)}/pg
@@ -529,28 +562,89 @@ export default function CheckoutPage() {
             <label htmlFor="co-area">Campus area</label>
             <CustomSelect
               id="co-area"
-              value={area}
+              value={area === "Other" ? "Other (Not listed)" : area}
               onChange={(value) => {
-                const next = value as LocationArea;
-                setArea(next);
-                setLocation(locationOptions[next][0]);
+                if (value === "Other (Not listed)" || value === "Other") {
+                  setArea("Other");
+                  setLocation(customLocation);
+                } else {
+                  const next = value as LocationArea;
+                  setArea(next);
+                  setLocation(locationOptions[next][0]);
+                }
               }}
-              options={areaOptions}
+              options={areaDropdownOptions}
               maxHeight={200}
             />
           </div>
-          <div className="checkout-field">
-            <label htmlFor="co-spot">
-              {fulfilment === "collection" ? "Pickup spot / Hostel" : "Delivery spot / Hostel"}
-            </label>
-            <CustomSelect
-              id="co-spot"
-              value={location}
-              onChange={setLocation}
-              options={locationOptions[area]}
-              maxHeight={280}
-            />
-          </div>
+
+          {area === "Other" ? (
+            <div className="checkout-field">
+              <label htmlFor="co-custom-location">
+                {fulfilment === "collection" ? "Pickup spot / Location details" : "Delivery spot / Address"}
+              </label>
+              <input
+                id="co-custom-location"
+                type="text"
+                className="pill-input custom-location-input"
+                value={location}
+                onChange={(event) => {
+                  setLocation(event.target.value);
+                  setCustomLocation(event.target.value);
+                }}
+                placeholder="e.g. Staff Quarters, PG Hostel, Faculty of Law, Gate 2..."
+                autoFocus
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, flexWrap: "wrap", gap: 6 }}>
+                <small style={{ color: "var(--muted)", fontSize: 12 }}>
+                  Unlisted location · Defaulting to Middletown transfer account.
+                </small>
+                <button
+                  type="button"
+                  className="checkout-link-btn"
+                  onClick={() => {
+                    setArea("Uptown");
+                    setLocation(locationOptions.Uptown[0]);
+                  }}
+                >
+                  ← Back to standard zones
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="checkout-field">
+              <label htmlFor="co-spot">
+                {fulfilment === "collection" ? "Pickup spot / Hostel" : "Delivery spot / Hostel"}
+              </label>
+              <CustomSelect
+                id="co-spot"
+                value={location}
+                onChange={(val) => {
+                  if (val === "Other / Not listed") {
+                    setArea("Other");
+                    setLocation(customLocation);
+                  } else {
+                    setLocation(val);
+                  }
+                }}
+                options={[...locationOptions[area], "Other / Not listed"]}
+                maxHeight={280}
+              />
+              <div style={{ marginTop: 6 }}>
+                <button
+                  type="button"
+                  className="checkout-link-btn"
+                  onClick={() => {
+                    setArea("Other");
+                    setLocation(customLocation);
+                  }}
+                >
+                  Location not listed? Type custom location
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="checkout-field">
             <label htmlFor="co-phone">Phone number</label>
             <div className="phone-input">

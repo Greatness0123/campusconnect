@@ -235,7 +235,7 @@ export default function Home() {
             pageSelection: f.pageSelection,
             copies: f.copies,
             colorMode: f.colorMode,
-            sides: f.sides,
+            sides: f.pages <= 1 ? "single" : f.sides,
             stapled: f.stapled,
             bound: f.bound,
           }))
@@ -321,7 +321,13 @@ export default function Home() {
         setFiles((current) =>
           current.map((file) =>
             file.id === item.id
-              ? { ...file, ...result, message: undefined, colorMode: "mono" }
+              ? {
+                  ...file,
+                  ...result,
+                  message: undefined,
+                  colorMode: "mono",
+                  sides: result.pages <= 1 ? "single" : file.sides,
+                }
               : file
           )
         );
@@ -353,7 +359,17 @@ export default function Home() {
   }
 
   function updateFile(id: string, patch: Partial<PrintFile>) {
-    setFiles((current) => current.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+    setFiles((current) =>
+      current.map((f) => {
+        if (f.id !== id) return f;
+        const updated = { ...f, ...patch };
+        const selCount = parsePageSelection(updated.pageSelection, updated.pages).length;
+        if ((updated.pages <= 1 || selCount <= 1) && updated.sides === "duplex") {
+          updated.sides = "single";
+        }
+        return updated;
+      })
+    );
   }
 
   function goToCheckout() {
@@ -659,32 +675,46 @@ export default function Home() {
                         {/* <h4 className="setting-title">Print settings</h4> */}
                         <div className="doc-settings-panel">
                             {/* Printing side */}
-                            <div className="option-pill-row">
-                              <div>
-                                <h4 className="setting-title">Printing side</h4>
-                                <p className="setting-desc">
-                                  {file.sides === "duplex"
-                                    ? "Printed on both sides of each sheet"
-                                    : "Printed on one side of each sheet"}
-                                </p>
-                              </div>
-                              <div className="pill-options-group">
-                                <button
-                                  className={`sub-pill-btn ${file.sides === "single" ? "active" : ""}`}
-                                  type="button"
-                                  onClick={() => updateFile(file.id, { sides: "single" })}
-                                >
-                                  Single-sided
-                                </button>
-                                <button
-                                  className={`sub-pill-btn ${file.sides === "duplex" ? "active" : ""}`}
-                                  type="button"
-                                  onClick={() => updateFile(file.id, { sides: "duplex" })}
-                                >
-                                  Front &amp; Back
-                                </button>
-                              </div>
-                            </div>
+                            {(() => {
+                              const selectedCount = parsePageSelection(file.pageSelection, file.pages).length;
+                              const isOnePage = (file.pages > 0 && file.pages <= 1) || selectedCount <= 1;
+                              return (
+                                <div className="option-pill-row">
+                                  <div>
+                                    <h4 className="setting-title">Printing side</h4>
+                                    <p className="setting-desc">
+                                      {isOnePage
+                                        ? "Single-page document (printed on one side)"
+                                        : file.sides === "duplex"
+                                        ? "Printed on both sides of each sheet"
+                                        : "Printed on one side of each sheet"}
+                                    </p>
+                                  </div>
+                                  <div className="pill-options-group">
+                                    <button
+                                      className={`sub-pill-btn ${file.sides === "single" || isOnePage ? "active" : ""}`}
+                                      type="button"
+                                      onClick={() => updateFile(file.id, { sides: "single" })}
+                                    >
+                                      Single-sided
+                                    </button>
+                                    <button
+                                      className={`sub-pill-btn ${file.sides === "duplex" && !isOnePage ? "active" : ""}`}
+                                      type="button"
+                                      disabled={isOnePage}
+                                      title={isOnePage ? "Front & back printing is unavailable for single-page files" : undefined}
+                                      onClick={() => {
+                                        if (!isOnePage) {
+                                          updateFile(file.id, { sides: "duplex" });
+                                        }
+                                      }}
+                                    >
+                                      Front &amp; Back
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
                             {/* Stapling */}
                             <div className="option-pill-row">
@@ -856,14 +886,14 @@ export default function Home() {
                 {files.length} {files.length === 1 ? "document" : "documents"} · {quote.copyPages} printed {quote.copyPages === 1 ? "page" : "pages"} ({quote.physicalSheets} {quote.physicalSheets === 1 ? "sheet" : "sheets"})
               </p>
 
-              {nightRate && (
-                <div className="night-rate-notice">
-                  <Moon size={13} />
-                  <span>
-                    Night rates until 6am · B&amp;W {formatNaira(pricing.monoNight)}/page
-                  </span>
-                </div>
-              )}
+              {/* {nightRate && (
+                // <div className="night-rate-notice">
+                //   <Moon size={13} />
+                //   <span>
+                //     Night rates until 8am · B&amp;W {formatNaira(pricing.monoNight)}/page
+                //   </span>
+                // </div>
+              )} */}
 
               <div className="quote-breakdown-list">
                 {quote.blackAndWhitePages > 0 && (
@@ -931,7 +961,7 @@ export default function Home() {
               {nightRate && (
                 <div className="night-rate-notice">
                   <Moon size={13} />
-                  <span>Night pricing in effect until 6am</span>
+                  <span>Night pricing in effect until 8am</span>
                 </div>
               )}
               <div className="rate-note-row">

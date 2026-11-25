@@ -224,7 +224,7 @@ export function QuotationModal({
                     {fulfilment === "collection" ? "Pickup Spot" : "Delivery Spot"}
                   </span>
                   <strong className="q-val">
-                    {area} · {location}
+                    {area === "Other" ? location : `${area} · ${location}`}
                   </strong>
                 </div>
                 {(sides || printMode) && (
@@ -292,7 +292,7 @@ export function QuotationModal({
                   </div>
                   {quote.night && (
                     <div className="quotation-stat-row">
-                      <span>Night rates (10pm–6am)</span>
+                      <span>Night rates (10pm–8am)</span>
                       <strong>Applied</strong>
                     </div>
                   )}

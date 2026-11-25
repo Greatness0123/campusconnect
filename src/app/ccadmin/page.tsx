@@ -138,6 +138,49 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
   return { ...order, documents: enrichedDocs };
 }
 
+function ExpressDeliveryTimer({ createdAt }: { createdAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const createdTime = new Date(createdAt).getTime();
+  if (Number.isNaN(createdTime)) return null;
+
+  const deadline = createdTime + 30 * 60 * 1000;
+  const diffMs = deadline - now;
+  const isOverdue = diffMs < 0;
+
+  const totalSeconds = Math.floor(Math.abs(diffMs) / 1000);
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  const formatted = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+
+  return (
+    <div
+      className={`admin-express-timer ${isOverdue ? "is-overdue" : ""}`}
+      title={isOverdue ? "Express delivery deadline exceeded (overdue)" : "30-minute express countdown"}
+    >
+      <span className="timer-countdown">
+        {isOverdue ? `-${formatted}` : formatted}
+      </span>
+    </div>
+  );
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export default function AdminPage() {
   // --- Access gate (verified server-side; passphrase never in this bundle) ---
   const [authState, setAuthState] = useState<"checking" | "locked" | "unlocked">("checking");
@@ -147,6 +190,9 @@ export default function AdminPage() {
 
   // --- Notifications ---
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
 
   const [orders, setOrders] = useState<DemoOrder[]>([]);
   const [totalOrderCount, setTotalOrderCount] = useState<number | null>(null);
@@ -193,7 +239,7 @@ export default function AdminPage() {
     };
   }, []);
 
-  // Track notification permission once unlocked.
+  // Track notification permission and Web Push subscription once unlocked.
   useEffect(() => {
     if (authState !== "unlocked") return;
     if (typeof Notification === "undefined") {
@@ -201,6 +247,26 @@ export default function AdminPage() {
       return;
     }
     setNotifPermission(Notification.permission);
+
+    async function checkExistingPush() {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          setPushSubscribed(true);
+          // Sync with server in background
+          void fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subscription: sub.toJSON() }),
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void checkExistingPush();
   }, [authState]);
 
   async function submitPassphrase(event: React.FormEvent) {
@@ -229,13 +295,72 @@ export default function AdminPage() {
     }
   }
 
-  async function enableNotifications() {
-    if (typeof Notification === "undefined") return;
+  async function enablePushNotifications() {
+    if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
+      alert("Push notifications are not supported on this browser.");
+      return;
+    }
+    setPushLoading(true);
     try {
       const result = await Notification.requestPermission();
       setNotifPermission(result);
+      if (result !== "granted") {
+        alert("Notification permission was not granted. Please enable notifications in your browser settings.");
+        setPushLoading(false);
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+
+      if (!sub) {
+        const keyRes = await fetch("/api/push/vapid-public-key");
+        const { publicKey } = (await keyRes.json()) as { publicKey: string };
+        const appKey = urlBase64ToUint8Array(publicKey);
+
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: appKey,
+        });
+      }
+
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: sub.toJSON() }),
+      });
+
+      setPushSubscribed(true);
+      playAlertChime();
+    } catch (err) {
+      console.error("Push subscribe error:", err);
+      alert(err instanceof Error ? err.message : "Failed to activate push notifications.");
+    } finally {
+      setPushLoading(false);
+    }
+  }
+
+  async function sendTestPush() {
+    setTestPushStatus("Sending test alert…");
+    try {
+      const res = await fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Test Alert 🔔",
+          body: "Persistent Web Push is active! Orders will alert your phone even when this site is closed.",
+          url: "/ccadmin",
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTestPushStatus(`Delivered to ${data.delivered} device(s)! Check your screen.`);
+        setTimeout(() => setTestPushStatus(null), 5000);
+      } else {
+        setTestPushStatus("Failed to send test push.");
+      }
     } catch {
-      // ignore
+      setTestPushStatus("Network error sending test alert.");
     }
   }
 
@@ -517,27 +642,67 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Notification opt-in (admin only) */}
-        {(notifPermission === "default" || notifPermission === "denied" || notifPermission === "unsupported") && (
-          <div className="admin-alert" style={{ marginBottom: 18 }}>
-            <BellRing size={18} />
-            <div style={{ flex: 1 }}>
-              <strong>Browser notifications</strong>
-              <p>
-                {notifPermission === "denied"
-                  ? "Notifications are blocked. Allow them in your browser site settings to get new-order alerts."
-                  : notifPermission === "unsupported"
-                    ? "This browser does not support notifications."
-                    : "Get an alert on this device whenever a new print order arrives. On iPhone or iPad, add the app to your Home Screen first."}
-              </p>
+        {/* Persistent Web Push Notification banner (admin only) */}
+        <div className="admin-alert" style={{ marginBottom: 18, alignItems: "center" }}>
+          <BellRing size={20} style={{ color: pushSubscribed ? "var(--success, #22c55e)" : "inherit" }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <strong>
+                {pushSubscribed ? "Persistent Web Push Active" : "Persistent Background Notifications"}
+              </strong>
+              {pushSubscribed && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    padding: "2px 6px",
+                    borderRadius: 4,
+                    background: "rgba(34, 197, 94, 0.2)",
+                    color: "var(--success, #22c55e)",
+                  }}
+                >
+                  Background Enabled
+                </span>
+              )}
             </div>
-            {notifPermission === "default" && (
-              <button className="admin-action-btn primary" type="button" onClick={enableNotifications}>
-                <Bell size={13} /> Enable
+            <p style={{ marginTop: 2 }}>
+              {pushSubscribed
+                ? "This device is registered. You will receive real-time banner alerts and audio rings even when this tab or browser is completely closed."
+                : notifPermission === "denied"
+                ? "Notifications are blocked. Please allow notifications in your browser's site settings to get order alerts."
+                : notifPermission === "unsupported"
+                ? "This browser does not support Web Push notifications."
+                : "Get instant sound & banner alerts on this device whenever a student places an order — even when this site is closed. (On iPhone / iPad: Tap Share → 'Add to Home Screen' and open as an app first)."}
+            </p>
+            {testPushStatus && (
+              <small style={{ color: "var(--accent, #f5b84c)", display: "block", marginTop: 4, fontWeight: 600 }}>
+                {testPushStatus}
+              </small>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {pushSubscribed ? (
+              <button
+                className="admin-action-btn"
+                type="button"
+                onClick={sendTestPush}
+                title="Send a test notification to verify your device receives alerts in the background"
+              >
+                <Bell size={13} /> Send Test Alert
+              </button>
+            ) : (
+              <button
+                className="admin-action-btn primary"
+                type="button"
+                onClick={enablePushNotifications}
+                disabled={pushLoading || notifPermission === "denied"}
+              >
+                <Bell size={13} /> {pushLoading ? "Activating…" : "Enable Background Alerts"}
               </button>
             )}
           </div>
-        )}
+        </div>
 
         {/* Quick Stats */}
         <div className="admin-quick-stats">
@@ -681,11 +846,14 @@ export default function AdminPage() {
                       <small style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>
                         {new Date(order.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </small>
+                      {order.fulfilment === "express" && order.status !== "Completed" && (
+                        <ExpressDeliveryTimer createdAt={order.createdAt} />
+                      )}
                     </td>
                     <td>
                       <strong>{order.customer}</strong>
                       <small style={{ display: "block", color: "var(--muted)", marginTop: 4 }}>
-                        {order.area} · {order.location}
+                        {order.area === "Other" ? order.location : `${order.area} · ${order.location}`}
                         {order.fulfilment && order.fulfilment !== "collection"
                           ? ` · ${order.fulfilment === "express" ? "Express" : "Standard"} delivery`
                           : ""}
