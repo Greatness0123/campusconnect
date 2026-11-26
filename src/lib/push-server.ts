@@ -1,16 +1,19 @@
 import { setVapidDetails, sendNotification } from "web-push";
 import { createClient } from "@supabase/supabase-js";
 
-export const VAPID_PUBLIC_KEY =
+export const VAPID_PUBLIC_KEY = (
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-  "BDiVordInD0OC-TFYoMRcWz1p5DaJDJyjIdvi1JhBbyMlWKKOAEqB5vmXcM_vxGo2WytIW9kVhsojM5zT197X_U";
+  "BDiVordInD0OC-TFYoMRcWz1p5DaJDJyjIdvi1JhBbyMlWKKOAEqB5vmXcM_vxGo2WytIW9kVhsojM5zT197X_U"
+).trim();
 
-export const VAPID_PRIVATE_KEY =
+export const VAPID_PRIVATE_KEY = (
   process.env.VAPID_PRIVATE_KEY ||
-  "KjQSXoVaJ1LLgqqea4lWBLmBV-_pfIm5v86OpO_QzVU";
+  "KjQSXoVaJ1LLgqqea4lWBLmBV-_pfIm5v86OpO_QzVU"
+).trim();
 
-export const VAPID_SUBJECT =
-  process.env.VAPID_SUBJECT || "mailto:admin@campusconnect.ng";
+export const VAPID_SUBJECT = (
+  process.env.VAPID_SUBJECT || "mailto:admin@campusconnect.ng"
+).trim();
 
 try {
   setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
@@ -48,17 +51,18 @@ export type StoredPushSubscription = {
   userAgent?: string;
 };
 
-export async function savePushSubscription(sub: StoredPushSubscription): Promise<boolean> {
+export async function savePushSubscription(
+  sub: StoredPushSubscription
+): Promise<{ ok: boolean; error?: string }> {
   if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
     console.warn("[push] savePushSubscription: missing fields", sub);
-    return false;
+    return { ok: false, error: "Invalid subscription: missing endpoint or keys." };
   }
 
   const db = getAdminSupabase();
   if (!db) {
     console.warn("[push] savePushSubscription: Supabase not configured — subscription NOT persisted");
-    // Return true so the client thinks it succeeded; they'll re-subscribe next visit
-    return true;
+    return { ok: false, error: "Supabase environment variables are not configured on the server." };
   }
 
   const { error } = await db.from("admin_push_subscriptions").upsert(
@@ -74,11 +78,11 @@ export async function savePushSubscription(sub: StoredPushSubscription): Promise
 
   if (error) {
     console.error("[push] savePushSubscription Supabase error:", error.message, error.details);
-    return false;
+    return { ok: false, error: error.message };
   }
 
   console.log("[push] Subscription saved:", sub.endpoint.slice(0, 60) + "…");
-  return true;
+  return { ok: true };
 }
 
 export async function getAllPushSubscriptions(): Promise<StoredPushSubscription[]> {

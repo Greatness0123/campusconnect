@@ -254,14 +254,35 @@ export default function AdminPage() {
       try {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
-        if (sub) {
+        if (!sub) return;
+
+        // Verify the browser's subscription uses the server's current VAPID key
+        const keyRes = await fetch("/api/push/vapid-public-key");
+        const { publicKey } = (await keyRes.json()) as { publicKey: string };
+        const expectedKey = urlBase64ToUint8Array(publicKey);
+        const existingKeyBuf = sub.options?.applicationServerKey;
+        let keyMatches = true;
+        if (existingKeyBuf) {
+          const existingKey = new Uint8Array(existingKeyBuf);
+          keyMatches =
+            existingKey.length === expectedKey.length &&
+            existingKey.every((byte, idx) => byte === expectedKey[idx]);
+        }
+
+        if (!keyMatches) {
+          await sub.unsubscribe();
+          setPushSubscribed(false);
+          return;
+        }
+
+        const saveRes = await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: sub.toJSON() }),
+        });
+        const saveData = (await saveRes.json()) as { ok?: boolean };
+        if (saveData.ok) {
           setPushSubscribed(true);
-          // Sync with server in background
-          void fetch("/api/push/subscribe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subscription: sub.toJSON() }),
-          });
         }
       } catch {
         // ignore
@@ -317,50 +338,57 @@ export default function AdminPage() {
 
   async function enablePushNotifications() {
     if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
-      alert("Push notifications are not supported on this browser.");
+      setTestPushStatus("❌ Push notifications are not supported on this browser.");
       return;
     }
     setPushLoading(true);
+    setTestPushStatus(null);
     try {
       const result = await Notification.requestPermission();
       setNotifPermission(result);
       if (result !== "granted") {
-        alert("Notification permission was not granted. Please enable notifications in your browser settings.");
-        setPushLoading(false);
+        setTestPushStatus("⚠️ Notification permission was not granted. Please enable notifications in browser settings.");
         return;
       }
 
       const reg = await navigator.serviceWorker.ready;
-      let sub = await reg.pushManager.getSubscription();
-
-      if (!sub) {
-        const keyRes = await fetch("/api/push/vapid-public-key");
-        const { publicKey } = (await keyRes.json()) as { publicKey: string };
-        const appKey = urlBase64ToUint8Array(publicKey);
-
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: appKey,
-        });
+      const existingSub = await reg.pushManager.getSubscription();
+      if (existingSub) {
+        // Always unsubscribe stale browser subscription so we bind to the current VAPID key
+        await existingSub.unsubscribe();
       }
+
+      const keyRes = await fetch("/api/push/vapid-public-key");
+      const { publicKey } = (await keyRes.json()) as { publicKey: string };
+      const appKey = urlBase64ToUint8Array(publicKey);
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: appKey,
+      });
 
       const saveRes = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subscription: sub.toJSON() }),
       });
-      const saveData = await saveRes.json() as { ok?: boolean; error?: string };
+      const saveData = (await saveRes.json()) as { ok?: boolean; error?: string };
       if (!saveData.ok) {
-        // Subscription saved in browser but server couldn't persist it
         console.warn("[push] Server could not save subscription:", saveData.error);
-        setTestPushStatus(`⚠️ Registered in browser but server error: ${saveData.error ?? "unknown"} — check Supabase table & env vars.`);
+        setPushSubscribed(false);
+        setTestPushStatus(`❌ Could not register device in database: ${saveData.error ?? "unknown error"}`);
+        return;
       }
 
       setPushSubscribed(true);
+      setTestPushStatus("✅ Device registered for background alerts!");
+      setTimeout(() => setTestPushStatus(null), 4000);
       playAlertChime();
     } catch (err) {
       console.error("Push subscribe error:", err);
-      alert(err instanceof Error ? err.message : "Failed to activate push notifications.");
+      const msg = err instanceof Error ? err.message : "Failed to activate push notifications.";
+      setPushSubscribed(false);
+      setTestPushStatus(`❌ ${msg}`);
     } finally {
       setPushLoading(false);
     }
@@ -396,6 +424,15 @@ export default function AdminPage() {
           const isVapid = code === 401 || code === 403;
           const isGone = code === 404 || code === 410;
           if (isVapid || isGone) {
+            if ("serviceWorker" in navigator) {
+              try {
+                const reg = await navigator.serviceWorker.ready;
+                const staleSub = await reg.pushManager.getSubscription();
+                if (staleSub) await staleSub.unsubscribe();
+              } catch {
+                // ignore
+              }
+            }
             setPushSubscribed(false);
             setTestPushStatus(
               `⚠️ All ${data.total} subscription(s) rejected (HTTP ${code} — ${isVapid ? "VAPID key mismatch" : "subscriptions expired"}). Stale entries purged. Please click "Enable Alerts" again to re-subscribe.`

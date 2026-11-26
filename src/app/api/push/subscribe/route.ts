@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
     const userAgent = request.headers.get("user-agent") || undefined;
 
-    const saved = await savePushSubscription({
+    const result = await savePushSubscription({
       endpoint: subscription.endpoint,
       keys: {
         p256dh: subscription.keys.p256dh,
@@ -26,9 +26,9 @@ export async function POST(request: Request) {
       userAgent,
     });
 
-    if (!saved) {
+    if (!result.ok) {
       return NextResponse.json(
-        { ok: false, error: "Could not save push subscription." },
+        { ok: false, error: result.error || "Could not save push subscription." },
         { status: 500 }
       );
     }
