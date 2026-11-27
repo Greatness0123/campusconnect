@@ -755,7 +755,7 @@ export default function AdminPage() {
                   ? "Notifications blockedallow them in browser site settings."
                   : notifPermission === "unsupported"
                   ? "This browser does not support Web Push notifications."
-                  : "Get instant alerts on this device when orders arriveeven when the site is closed. iPhone/iPad: Add to Home Screen first."}
+                  : "Get instant alerts on this device when orders arrive even when the site is closed. iPhone/iPad: Add to Home Screen first."}
               </p>
               {testPushStatus && (
                 <div className="admin-push-card-status">
