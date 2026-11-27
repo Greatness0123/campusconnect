@@ -32,7 +32,7 @@ TO anon, authenticated
 USING (true)
 WITH CHECK (true);
 
--- Service role bypasses RLS automatically — no SELECT policy needed for server reads.
+-- Service role bypasses RLS automaticallyno SELECT policy needed for server reads.
 -- But add one so the anon key can also read (useful for debugging in Supabase UI):
 CREATE POLICY "anon can read push subscriptions"
 ON public.admin_push_subscriptions

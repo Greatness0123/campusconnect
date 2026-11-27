@@ -8,7 +8,7 @@ import Link from "next/link";
 // type ThemeMode = "system" | "light" | "dark";
 
 export function AppHeader({ compact = false, showOrders = true, userName, onChangeName }: { compact?: boolean; showOrders?: boolean; userName?: string; onChangeName?: () => void }) {
-  // Theme toggle — commented out by request
+  // Theme togglecommented out by request
   // const [theme, setTheme] = useState<ThemeMode>("system");
 
   // useEffect(() => {

@@ -416,9 +416,9 @@ export default function AdminPage() {
       };
       if (data.ok) {
         if (data.total === 0) {
-          setTestPushStatus("⚠️ 0 devices in DB — run the SQL migration in Supabase & add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars, then re-enable alerts.");
+          setTestPushStatus("⚠️ 0 devices in DBrun the SQL migration in Supabase & add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars, then re-enable alerts.");
         } else if ((data.delivered ?? 0) === 0 && (data.total ?? 0) > 0) {
-          // All sends failed — likely VAPID key mismatch (401/403) or stale subscriptions
+          // All sends failedlikely VAPID key mismatch (401/403) or stale subscriptions
           const firstErr = data.errors?.[0];
           const code = firstErr?.statusCode;
           const isVapid = code === 401 || code === 403;
@@ -435,11 +435,11 @@ export default function AdminPage() {
             }
             setPushSubscribed(false);
             setTestPushStatus(
-              `⚠️ All ${data.total} subscription(s) rejected (HTTP ${code} — ${isVapid ? "VAPID key mismatch" : "subscriptions expired"}). Stale entries purged. Please click "Enable Alerts" again to re-subscribe.`
+              `⚠️ All ${data.total} subscription(s) rejected (HTTP ${code}${isVapid ? "VAPID key mismatch" : "subscriptions expired"}). Stale entries purged. Please click "Enable Alerts" again to re-subscribe.`
             );
           } else {
             setTestPushStatus(
-              `❌ Sent to 0/${data.total} — error ${code ?? "unknown"}: ${firstErr?.message?.slice(0, 120) ?? "check Vercel logs"}`
+              `❌ Sent to 0/${data.total}error ${code ?? "unknown"}: ${firstErr?.message?.slice(0, 120) ?? "check Vercel logs"}`
             );
           }
         } else {
@@ -752,10 +752,10 @@ export default function AdminPage() {
                 {pushSubscribed
                   ? "This device will receive alerts even when this site is fully closed."
                   : notifPermission === "denied"
-                  ? "Notifications blocked — allow them in browser site settings."
+                  ? "Notifications blockedallow them in browser site settings."
                   : notifPermission === "unsupported"
                   ? "This browser does not support Web Push notifications."
-                  : "Get instant alerts on this device when orders arrive — even when the site is closed. iPhone/iPad: Add to Home Screen first."}
+                  : "Get instant alerts on this device when orders arriveeven when the site is closed. iPhone/iPad: Add to Home Screen first."}
               </p>
               {testPushStatus && (
                 <div className="admin-push-card-status">
@@ -960,7 +960,7 @@ export default function AdminPage() {
                               {idx > 0 && (
                                 <div style={{ height: 1, background: "var(--border-color, rgba(255,255,255,0.08))", margin: "8px 0" }} />
                               )}
-                              {/* 2-column grid: doc info left, specs right — always aligned */}
+                              {/* 2-column grid: doc info left, specs rightalways aligned */}
                               <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) 140px", gap: "0 24px", alignItems: "start" }}>
                                 {/* Left: filename + fetch */}
                                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

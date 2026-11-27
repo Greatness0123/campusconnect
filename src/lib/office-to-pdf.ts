@@ -28,7 +28,7 @@ export type OfficeConversionResult = {
 
 const MAX_PAGES = 250;
 const CONVERSION_DEADLINE_MS = 60_000;
-// Capture pages at 2.5x (240 DPI) — sharp print output while staying well
+// Capture pages at 2.5x (240 DPI)sharp print output while staying well
 // under mobile canvas limits and keeping conversion quick.
 const CAPTURE_SCALE = 2.5;
 const MAX_CAPTURE_DIMENSION = 2400;
@@ -96,7 +96,7 @@ function legacyFormatError(extension: string): Error {
 
 function conversionFailedError(): Error {
   return new Error(
-    "This document could not be converted. It may be damaged — open it and re-save it, then try again."
+    "This document could not be converted. It may be damagedopen it and re-save it, then try again."
   );
 }
 
@@ -585,7 +585,7 @@ export async function convertOfficeToPdf(
       const page = pdfDoc.addPage([pageWidth, pageHeight]);
       page.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
 
-      // Release page buffers immediately — a 250-page document must never
+      // Release page buffers immediatelya 250-page document must never
       // hold every full-resolution canvas in memory at once.
       previewCanvas.width = 0;
       previewCanvas.height = 0;

@@ -61,7 +61,7 @@ function persist(next: OrderDraft) {
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(serialize(next)));
   } catch {
-    // Quota / private mode — ignore, in-memory copy still works.
+    // Quota / private modeignore, in-memory copy still works.
   }
 }
 

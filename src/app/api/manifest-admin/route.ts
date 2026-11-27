@@ -9,7 +9,7 @@ export async function GET() {
   const manifest = {
     name: "Campus Prints – Admin",
     short_name: "Prints Admin",
-    description: "Campus Prints admin dashboard — manage orders and notifications.",
+    description: "Campus Prints admin dashboardmanage orders and notifications.",
     start_url: "/ccadmin",
     scope: "/",
     display: "standalone",

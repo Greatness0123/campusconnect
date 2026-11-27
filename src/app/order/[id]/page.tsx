@@ -340,7 +340,7 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
                 </button>
               ) : (
                 <span className="receipt-sent-confirm">
-                  <Check size={12} /> Receipt sent — awaiting operator verification
+                  <Check size={12} /> Receipt sentawaiting operator verification
                 </span>
               )}
             </div>
@@ -476,7 +476,7 @@ function enrichOrderDocuments(order: DemoOrder): DemoOrder {
             </div>
           ))}
 
-          {/* Persistent memory return to payment row — hidden once collected */}
+          {/* Persistent memory return to payment rowhidden once collected */}
           {order.status !== "Completed" && (
           <div className="order-return-payment-box">
             <div className="order-return-payment-info">

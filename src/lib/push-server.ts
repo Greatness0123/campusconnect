@@ -24,7 +24,7 @@ try {
 /**
  * Server-side Supabase client using the SERVICE ROLE key.
  * This bypasses RLS so push subscriptions can be read from any serverless lambda.
- * This module is ONLY imported in API routes (server-side) — never in client components.
+ * This module is ONLY imported in API routes (server-side)never in client components.
  */
 function getAdminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -61,7 +61,7 @@ export async function savePushSubscription(
 
   const db = getAdminSupabase();
   if (!db) {
-    console.warn("[push] savePushSubscription: Supabase not configured — subscription NOT persisted");
+    console.warn("[push] savePushSubscription: Supabase not configuredsubscription NOT persisted");
     return { ok: false, error: "Supabase environment variables are not configured on the server." };
   }
 
@@ -88,7 +88,7 @@ export async function savePushSubscription(
 export async function getAllPushSubscriptions(): Promise<StoredPushSubscription[]> {
   const db = getAdminSupabase();
   if (!db) {
-    console.warn("[push] getAllPushSubscriptions: Supabase not configured — returning []");
+    console.warn("[push] getAllPushSubscriptions: Supabase not configuredreturning []");
     return [];
   }
 
@@ -179,7 +179,7 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
       const errMsg = e?.body ?? e?.message ?? String(err);
 
       console.error(
-        `[push] ✗ send failed — status ${statusCode} — endpoint: ${sub.endpoint.slice(0, 60)}\n  body: ${errMsg}`
+        `[push] ✗ send failedstatus ${statusCode}endpoint: ${sub.endpoint.slice(0, 60)}\n  body: ${errMsg}`
       );
 
       errors.push({
@@ -188,11 +188,11 @@ export async function broadcastPushNotification(payload: PushNotificationPayload
         message: errMsg?.slice(0, 200),
       });
 
-      // 404 / 410 = subscription gone — purge it
+      // 404 / 410 = subscription gonepurge it
       if (statusCode === 404 || statusCode === 410) {
         void removePushSubscription(sub.endpoint);
       }
-      // 401 / 403 = VAPID mismatch or expired — purge so admin can re-subscribe
+      // 401 / 403 = VAPID mismatch or expiredpurge so admin can re-subscribe
       if (statusCode === 401 || statusCode === 403) {
         void removePushSubscription(sub.endpoint);
       }

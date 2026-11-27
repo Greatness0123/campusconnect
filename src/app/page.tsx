@@ -469,7 +469,7 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Speed Comparison Notice Card — commented out by request */}
+        {/* Speed Comparison Notice Cardcommented out by request */}
         {/* <section className="speed-guide-card">
           <h2 className="speed-guide-title">
             <Sparkles size={15} /> NB: Analysis speed depends on file type
@@ -492,7 +492,7 @@ export default function Home() {
               </tr>
               <tr>
                 <td>DOCX (needs conversion)</td>
-                <td>Slowest — limited by conversion</td>
+                <td>Slowestlimited by conversion</td>
               </tr>
               <tr>
                 <td>Photo (jpg/png)</td>
@@ -523,7 +523,7 @@ export default function Home() {
               }}
             />
 
-            {/* Upload Zone — only when no files yet */}
+            {/* Upload Zoneonly when no files yet */}
             {files.length === 0 && (
               <div
                 className={`upload-dropzone ${isDragging ? "is-dragging" : ""}`}

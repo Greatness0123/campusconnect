@@ -77,7 +77,7 @@ async function main() {
         process.exit(value.pass ? 0 : 1);
       }
     } catch (error) {
-      // execution context may be mid-navigation (dev-server compile) — keep polling
+      // execution context may be mid-navigation (dev-server compile)keep polling
     }
     await new Promise((r) => setTimeout(r, 1000));
   }

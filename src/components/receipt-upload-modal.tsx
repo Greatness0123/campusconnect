@@ -34,7 +34,7 @@ export function ReceiptUploadModal({ orderId, onClose, onUploaded }: ReceiptUplo
       const url = URL.createObjectURL(picked);
       setPreview(url);
     } else {
-      setPreview(null); // PDF — no preview
+      setPreview(null); // PDFno preview
     }
   }
 
@@ -55,7 +55,7 @@ export function ReceiptUploadModal({ orderId, onClose, onUploaded }: ReceiptUplo
     setError(null);
 
     if (!isSupabaseConfigured) {
-      // Demo fallback — just mark as done without actual upload
+      // Demo fallbackjust mark as done without actual upload
       await new Promise((r) => setTimeout(r, 1200));
       setDone(true);
       setUploading(false);
@@ -129,11 +129,11 @@ export function ReceiptUploadModal({ orderId, onClose, onUploaded }: ReceiptUplo
                     <Image src={preview} alt="Receipt preview" fill style={{ objectFit: "contain" }} sizes="400px" />
                   </div>
                 ) : file ? (
-                  /* PDF selected — no image preview */
+                  /* PDF selectedno image preview */
                   <div className="receipt-drop-placeholder">
                     <ImageIcon size={32} className="receipt-drop-icon" />
                     <span className="receipt-drop-label">{file.name}</span>
-                    <span className="receipt-drop-hint">PDF selected — tap to change</span>
+                    <span className="receipt-drop-hint">PDF selectedtap to change</span>
                   </div>
                 ) : (
                   /* Empty state */

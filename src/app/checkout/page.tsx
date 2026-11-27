@@ -710,7 +710,7 @@ export default function CheckoutPage() {
         {error && <p className="inline-alert checkout-error">{error}</p>}
 
         {orderStatus === "Completed" ? (
-          /* ── Order already collected — show banner, block re-submission ── */
+          /* ── Order already collectedshow banner, block re-submission ── */
           <div className="checkout-completed-banner">
             <div className="checkout-completed-icon">
               <Check size={22} />

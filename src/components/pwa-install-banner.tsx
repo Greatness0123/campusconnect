@@ -44,7 +44,7 @@ export function PwaInstallBanner({ variant = "student" }: PwaInstallBannerProps)
       return () => clearTimeout(t);
     }
 
-    // Android / Desktop — listen for beforeinstallprompt
+    // Android / Desktoplisten for beforeinstallprompt
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -100,7 +100,7 @@ export function PwaInstallBanner({ variant = "student" }: PwaInstallBannerProps)
             ? <>Tap <strong>Share</strong> → <strong>Add to Home Screen</strong> to install</>
             : isAdmin
             ? "Get order alerts on your screen even when this site is closed."
-            : "Quick access to print orders — right from your home screen."}
+            : "Quick access to print ordersright from your home screen."}
         </p>
       </div>
       <div className="pwa-install-actions">
